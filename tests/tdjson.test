@@ -1,0 +1,17 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+package require tdjson
+
+test create-1.1 {} {
+   td_create_client_id
+} {1}
+
+test execute-1.2 {} {
+   td_execute {{"@type":"getOption","name":"xxx"}}
+} {{"@type":"error","code":400,"message":"The option can't be get synchronously"}}
+
+::tcltest::cleanupTests
+return

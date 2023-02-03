@@ -1,0 +1,41 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+package require tdjson
+
+test tdjson-1.1 {} {
+    list [catch {td_create_client_id x} errMsg] $errMsg
+} {1 {wrong # args: should be "td_create_client_id"}}
+
+test tdjson-1.2 {} {
+    list [catch {td_execute} errMsg] $errMsg
+} {1 {wrong # args: should be "td_execute request"}}
+
+test tdjson-1.3.1 {} {
+    list [catch {td_send} errMsg] $errMsg
+} {1 {wrong # args: should be "td_send client_id request"}}
+
+test tdjson-1.3.2 {} {
+    list [catch {td_send x} errMsg] $errMsg
+} {1 {wrong # args: should be "td_send client_id request"}}
+
+test tdjson-1.3.3 {} {
+    list [catch {td_send 1} errMsg] $errMsg
+} {1 {wrong # args: should be "td_send client_id request"}}
+
+test tdjson-1.3.4 {} {
+    list [catch {td_send x y} errMsg] $errMsg
+} {1 {expected integer but got "x"}}
+
+test tdjson-1.4.1 {} {
+    list [catch {td_receive} errMsg] $errMsg
+} {1 {wrong # args: should be "td_receive timeout"}}
+
+test tdjson-1.4.2 {} {
+    list [catch {td_receive x} errMsg] $errMsg
+} {1 {expected floating-point number but got "x"}}
+
+::tcltest::cleanupTests
+return
