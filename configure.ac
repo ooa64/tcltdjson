@@ -71,7 +71,7 @@ TEA_SETUP_COMPILER
 # and PKG_TCL_SOURCES.
 #-----------------------------------------------------------------------
 
-TEA_ADD_SOURCES([tcltdjson.cpp])
+TEA_ADD_SOURCES([tdjson.c tcltdjson.c])
 TEA_ADD_HEADERS([])
 TEA_ADD_INCLUDES([])
 TEA_ADD_LIBS([])
@@ -173,6 +173,19 @@ TEA_PROG_TCLSH
 
 #TEA_EXPORT_CONFIG([tdjson])
 #AC_SUBST(TDJSON_VAR)
+
+#-------------------------------------------------------------------
+
+AC_ARG_WITH([tdlib],
+    [AS_HELP_STRING([--with-tdlib=<path>],
+        [The top-level directory to the tdlib installation.])],
+    [AS_IF([test -d "$with_tdlib"],
+        [AC_MSG_NOTICE([Using tdlib from "$with_tdlib"])],
+        [AC_MSG_ERROR([Specify an existing directory for tdlib, not "$with_tdlib"])])],
+    [AC_MSG_ERROR([Use --with-tdlib=<path> to specify the path to tdlib])])
+
+TDLIB_HOME="$with_tdlib"
+AC_SUBST([TDLIB_HOME])
 
 #--------------------------------------------------------------------
 # Specify files to substitute AC variables in. You may alternatively

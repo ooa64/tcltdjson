@@ -18,6 +18,7 @@
 #========================================================================
 
 #TDJSON_NEW_VAR	= @TDJSON_NEW_VAR@
+TDLIB_HOME	= @TDLIB_HOME@
 
 #========================================================================
 # Nothing of the variables below this line should need to be changed.
@@ -133,7 +134,7 @@ EXTRA_PATH	= $(top_builddir):$(TCL_BIN_DIR)
 #EXTRA_PATH	= $(top_builddir):$(TCL_BIN_DIR):$(TK_BIN_DIR)
 TCLLIBPATH	= $(top_builddir)
 TCLSH_ENV	= TCL_LIBRARY=`@CYGPATH@ $(TCL_SRC_DIR)/library`
-PKG_ENV		= @LD_LIBRARY_PATH_VAR@="$(EXTRA_PATH):$(@LD_LIBRARY_PATH_VAR@)" \
+PKG_ENV		= @LD_LIBRARY_PATH_VAR@="$(EXTRA_PATH):$(TDLIB_HOME)/lib:$(@LD_LIBRARY_PATH_VAR@)" \
 		  PATH="$(EXTRA_PATH):$(PATH)" \
 		  TCLLIBPATH="$(TCLLIBPATH)"
 
@@ -164,9 +165,9 @@ CONFIG_CLEAN_FILES = Makefile pkgIndex.tcl
 CLEANFILES	= @CLEANFILES@
 
 CPPFLAGS	= @CPPFLAGS@
-LIBS		= @PKG_LIBS@ @LIBS@
+LIBS		= @PKG_LIBS@ @LIBS@ -L$(TDLIB_HOME)/lib -ltdjson
 AR		= @AR@
-CFLAGS		= @CFLAGS@
+CFLAGS		= @CFLAGS@ -I$(TDLIB_HOME)/include
 LDFLAGS		= @LDFLAGS@
 LDFLAGS_DEFAULT			= @LDFLAGS_DEFAULT@
 COMPILE		= $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) \
