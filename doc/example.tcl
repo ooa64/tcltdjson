@@ -27,12 +27,12 @@ td_send $client_id {{"@type": "getOption", "name": "version", "@extra": 1.01234}
 # main events cycle
 while {true} {
    set json [td_receive 1.0]
-   puts $json
+   puts JSON:$json
 
    set event [json2dict $json]
-   puts $event
+   puts DICT:$event
 
-   if {[dict get $event "@type"] eq "updateAuthorizationState"} {
+   if {[dict exists $event "@type"] && [dict get $event "@type"] eq "updateAuthorizationState"} {
        set auth_state_type [dict get $event "authorization_state" "@type"]
 
        # if client is closed, we need to destroy it and create new client
