@@ -5,37 +5,49 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
 
 package require tdjson
 
-test tdjson-1.1 {} {
+test tdjson-1.1 {td_create_client_id} {
     list [catch {td_create_client_id x} errMsg] $errMsg
 } {1 {wrong # args: should be "td_create_client_id"}}
 
-test tdjson-1.2 {} {
+test tdjson-1.2 {td_execute} {
     list [catch {td_execute} errMsg] $errMsg
 } {1 {wrong # args: should be "td_execute request"}}
 
-test tdjson-1.3.1 {} {
+test tdjson-1.3.1 {td_send} {
     list [catch {td_send} errMsg] $errMsg
 } {1 {wrong # args: should be "td_send client_id request"}}
 
-test tdjson-1.3.2 {} {
+test tdjson-1.3.2 {td_send} {
     list [catch {td_send x} errMsg] $errMsg
 } {1 {wrong # args: should be "td_send client_id request"}}
 
-test tdjson-1.3.3 {} {
+test tdjson-1.3.3 {td_send} {
     list [catch {td_send 1} errMsg] $errMsg
 } {1 {wrong # args: should be "td_send client_id request"}}
 
-test tdjson-1.3.4 {} {
+test tdjson-1.3.4 {td_send} {
     list [catch {td_send x y} errMsg] $errMsg
 } {1 {expected integer but got "x"}}
 
-test tdjson-1.4.1 {} {
+test tdjson-1.4.1 {td_receive} {
     list [catch {td_receive} errMsg] $errMsg
 } {1 {wrong # args: should be "td_receive timeout"}}
 
-test tdjson-1.4.2 {} {
+test tdjson-1.4.2 {td_receive} {
     list [catch {td_receive x} errMsg] $errMsg
 } {1 {expected floating-point number but got "x"}}
+
+test tdjson-1.5.1 {td_set_log_message_callback} {
+    list [catch {td_set_log_message_callback} errMsg] $errMsg
+} {1 {wrong # args: should be "td_set_log_message_callback verbosity_level ?message?"}}
+
+test tdjson-1.5.2 {td_set_log_message_callback} {
+    list [catch {td_set_log_message_callback 1 2 3} errMsg] $errMsg
+} {1 {wrong # args: should be "td_set_log_message_callback verbosity_level ?message?"}}
+
+test tdjson-1.5.3 {td_set_log_message_callback} {
+    list [catch {td_set_log_message_callback x} errMsg] $errMsg
+} {1 {expected integer but got "x"}}
 
 ::tcltest::cleanupTests
 return

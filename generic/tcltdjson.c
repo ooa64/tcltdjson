@@ -61,6 +61,65 @@ static int Receive_Cmd(void *clientData, Tcl_Interp *interp, int objc, Tcl_Obj *
     }
 }
 
+typedef struct {
+    Tcl_Obj *script;
+    Tcl_Interp *interp;
+} LogMessageCallback;
+
+static LogMessageCallback *logMessageCallback = NULL;
+
+static void td_log_message_callback(int verbosity_level, const char *message) {
+    if (logMessageCallback) {
+        Tcl_Interp *interp = logMessageCallback->interp;
+        Tcl_Obj *script = Tcl_NewListObj(0, NULL);
+        Tcl_ListObjAppendElement(NULL, script, logMessageCallback->script);
+        Tcl_ListObjAppendElement(NULL, script, Tcl_NewIntObj(verbosity_level));
+        Tcl_ListObjAppendElement(NULL, script, Tcl_NewStringObj(message, -1));
+        Tcl_IncrRefCount(script);
+        int result = Tcl_EvalObjEx(interp, script, TCL_EVAL_GLOBAL | TCL_EVAL_DIRECT);
+        Tcl_DecrRefCount(script);
+        if (result == TCL_ERROR) {
+            Tcl_BackgroundException(interp, TCL_ERROR);
+        }
+    }
+/*  Tcl_Panic("TDLib fatal error: %d %s", verbosity_level, message);*/
+}
+
+static int SetLogMessageCallback_Cmd(void *clientData, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+    if (objc > 1 && objc <= 3) {
+        int max_verbosity_level;
+        if (Tcl_GetIntFromObj(interp, objv[1], &max_verbosity_level) != TCL_OK) {
+            return TCL_ERROR;
+        }
+        if (logMessageCallback) {
+            Tcl_DecrRefCount(logMessageCallback->script);
+            Tcl_Free((char *)logMessageCallback);
+            logMessageCallback = NULL;
+        }
+        if (objc == 2) {
+            td_set_log_message_callback(max_verbosity_level, NULL);
+        } else {
+            logMessageCallback = (LogMessageCallback *)Tcl_Alloc(sizeof(LogMessageCallback));
+            Tcl_Obj *script = objv[2];
+            Tcl_IncrRefCount(script);
+            logMessageCallback->script = script;
+            logMessageCallback->interp = interp;
+            td_set_log_message_callback(max_verbosity_level, &td_log_message_callback);
+        }
+        return TCL_OK;
+    } else {
+        Tcl_WrongNumArgs(interp, 1, objv, "verbosity_level ?message?");
+        return TCL_ERROR;
+    }
+}
+
+#ifndef NDEBUG
+static int TestLogMessageCallback_Cmd(void *clientData, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+    td_log_message_callback(0, "TEST");
+    return TCL_OK;
+}
+#endif
+
 #ifndef STRINGIFY
 #  define STRINGIFY(x) STRINGIFY1(x)
 #  define STRINGIFY1(x) #x
@@ -71,7 +130,7 @@ extern "C" {
 #endif  /* __cplusplus */
 DLLEXPORT int
 Tdjson_Init(
-    Tcl_Interp* interp)		/* Tcl interpreter */
+    Tcl_Interp* interp)     /* Tcl interpreter */
 {
     Tcl_CmdInfo info;
 
@@ -80,76 +139,79 @@ Tdjson_Init(
      * which requires 8.1.
      */
     if (Tcl_InitStubs(interp, "8.1", 0) == NULL) {
-	return TCL_ERROR;
+        return TCL_ERROR;
     }
 
     if (Tcl_GetCommandInfo(interp, "::tcl::build-info", &info)) {
-	Tcl_CreateObjCommand(interp, "::tdjson::build-info",
-		info.objProc, (void *)(
-		    PACKAGE_VERSION "+" STRINGIFY(TDJSON_VERSION_UUID)
+    Tcl_CreateObjCommand(interp, "::tdjson::build-info",
+        info.objProc, (void *)(
+            PACKAGE_VERSION "+" STRINGIFY(TDJSON_VERSION_UUID)
 #if defined(__clang__) && defined(__clang_major__)
-			    ".clang-" STRINGIFY(__clang_major__)
+                ".clang-" STRINGIFY(__clang_major__)
 #if __clang_minor__ < 10
-			    "0"
+                "0"
 #endif
-			    STRINGIFY(__clang_minor__)
+                STRINGIFY(__clang_minor__)
 #endif
 #if defined(__cplusplus) && !defined(__OBJC__)
-			    ".cplusplus"
+                ".cplusplus"
 #endif
 #ifndef NDEBUG
-			    ".debug"
+                ".debug"
 #endif
 #if !defined(__clang__) && !defined(__INTEL_COMPILER) && defined(__GNUC__)
-			    ".gcc-" STRINGIFY(__GNUC__)
+                ".gcc-" STRINGIFY(__GNUC__)
 #if __GNUC_MINOR__ < 10
-			    "0"
+                "0"
 #endif
-			    STRINGIFY(__GNUC_MINOR__)
+                STRINGIFY(__GNUC_MINOR__)
 #endif
 #ifdef __INTEL_COMPILER
-			    ".icc-" STRINGIFY(__INTEL_COMPILER)
+                ".icc-" STRINGIFY(__INTEL_COMPILER)
 #endif
 #ifdef TCL_MEM_DEBUG
-			    ".memdebug"
+                ".memdebug"
 #endif
 #if defined(_MSC_VER)
-			    ".msvc-" STRINGIFY(_MSC_VER)
+                ".msvc-" STRINGIFY(_MSC_VER)
 #endif
 #ifdef USE_NMAKE
-			    ".nmake"
+                ".nmake"
 #endif
 #ifndef TCL_CFG_OPTIMIZED
-			    ".no-optimize"
+                ".no-optimize"
 #endif
 #ifdef __OBJC__
-			    ".objective-c"
+                ".objective-c"
 #if defined(__cplusplus)
-			    "plusplus"
+                "plusplus"
 #endif
 #endif
 #ifdef TCL_CFG_PROFILED
-			    ".profile"
+                ".profile"
 #endif
 #ifdef PURIFY
-			    ".purify"
+                ".purify"
 #endif
 #ifdef STATIC_BUILD
-			    ".static"
+                ".static"
 #endif
-		), NULL);
+        ), NULL);
     }
 
     /* Provide the current package */
 
     if (Tcl_PkgProvideEx(interp, PACKAGE_NAME, PACKAGE_VERSION, NULL) != TCL_OK) {
-	return TCL_ERROR;
+        return TCL_ERROR;
     }
     Tcl_CreateObjCommand(interp, "td_create_client_id", (Tcl_ObjCmdProc *)CreateClientId_Cmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "td_execute", (Tcl_ObjCmdProc *)Execute_Cmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "td_send", (Tcl_ObjCmdProc *)Send_Cmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "td_receive", (Tcl_ObjCmdProc *)Receive_Cmd, NULL, NULL);
-
+    Tcl_CreateObjCommand(interp, "td_set_log_message_callback", (Tcl_ObjCmdProc *)SetLogMessageCallback_Cmd, NULL, NULL);
+#ifndef NDEBUG
+    Tcl_CreateObjCommand(interp, "td_test_log_message_callback", (Tcl_ObjCmdProc *)TestLogMessageCallback_Cmd, NULL, NULL);
+#endif
     return TCL_OK;
 }
 #ifdef __cplusplus

@@ -18,6 +18,15 @@ proc input {prompt} {
     string trim [gets stdin]
 }
 
+proc on_log_message_callback {verbosity_level message} {
+    if {verbosity_level == 0} {
+        puts "TDLib fatal error: $verbosity_level $message"
+        exit 1
+    }
+}
+
+td_set_log_message_callback 2 on_log_message_callback
+
 # setting TDLib log verbosity level to 1 (errors} $x]
 puts [td_execute {{"@type": "setLogVerbosityLevel", "new_verbosity_level": 1, "@extra": 1.01234}}]
 
@@ -33,7 +42,7 @@ td_send $client_id {{"@type": "getOption", "name": "version", "@extra": 1.01234}
 # main events cycle
 while {true} {
     set json [td_receive 1.0]
-    puts <$json>
+    puts $json
 
     set event [json2dict $json]
     if {[dict exists $event "@type"] \
@@ -105,5 +114,5 @@ while {true} {
             }
         }
     }
-    update
+    update idletasks
 }
