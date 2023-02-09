@@ -143,9 +143,9 @@ Tdjson_Init(
     }
 
     if (Tcl_GetCommandInfo(interp, "::tcl::build-info", &info)) {
-    Tcl_CreateObjCommand(interp, "::tdjson::build-info",
-        info.objProc, (void *)(
-            PACKAGE_VERSION "+" STRINGIFY(TDJSON_VERSION_UUID)
+        Tcl_CreateObjCommand(interp, "::tdjson::build-info",
+            info.objProc, (void *)(
+                PACKAGE_VERSION "+" STRINGIFY(TDJSON_VERSION_UUID)
 #if defined(__clang__) && defined(__clang_major__)
                 ".clang-" STRINGIFY(__clang_major__)
 #if __clang_minor__ < 10
@@ -196,7 +196,7 @@ Tdjson_Init(
 #ifdef STATIC_BUILD
                 ".static"
 #endif
-        ), NULL);
+            ), NULL);
     }
 
     /* Provide the current package */

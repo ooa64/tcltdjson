@@ -1,3 +1,5 @@
+lappend auto_path [file join [file dirname [info script]] .. win]
+
 package require tdjson
 
 proc json2dict {json} {
@@ -19,8 +21,8 @@ proc input {prompt} {
 }
 
 proc on_log_message_callback {verbosity_level message} {
-    if {verbosity_level == 0} {
-        puts "TDLib fatal error: $verbosity_level $message"
+    if {"verbosity_level" == 0} {
+        puts stderr "TDLib fatal error: $verbosity_level $message"
         exit 1
     }
 }

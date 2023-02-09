@@ -8,14 +8,25 @@ package require tdjson
 proc callback args {set ::callback $args}
 testConstraint testCallback [llength [info commands td_test_log_message_callback]]
 
+catch {td_execute {{"@type": "setLogVerbosityLevel", "new_verbosity_level": 1}}}
+
 test create-1.1 {} {
    td_create_client_id
 } {1}
 
-test execute-1.2 {} {
-   td_execute {{"@type":"getOption","name":"xxx"}}
-} {{"@type":"error","code":400,"message":"The option can't be get synchronously"}}
+test execute-1.2.1 {td_execute} {
+   td_execute {{"@type":"testReturnError","error":{"code": 0 "message":"TEST"}}}
+} {{"@type":"error","code":0,"message":"TEST"}}
 
+test execute-1.2.2 {td_execute} {
+   td_execute {{"@type":"testSquareInt","x":2}}
+} {{"@type":"error","code":400,"message":"The method can't be executed synchronously"}}
+
+# TODO: wait for our @extra
+test sendreceive-1.3.1 {td_send/td_receive} todo {
+   td_send 1 {{"@type":"testSquareInt","x":2,"@extra":"testSquareInt"}}
+   td_receive 1.0
+} {{"@type":"testInt","value":4,"@client_id":1,"@extra":"testSquareInt"}}
 
 test callback-1.5.1 {td_set_log_message_callback} {
     td_set_log_message_callback 0
