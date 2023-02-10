@@ -8,15 +8,15 @@ wm withdraw .
 
 catch {console show; update idle}
 
-option add *app*log*list*width 100 widgetDefault
-option add *app*log*list*height 30 widgetDefault
-option add *app*opt*list*width  50 widgetDefault
-option add *app*opt*list*height 30 widgetDefault
-option add *app*inputBox*Entry*width 50 widgetDefault
+option add *app*log*list*width      100 widgetDefault
+option add *app*log*list*height      30 widgetDefault
+option add *app*opt*list*width       50 widgetDefault
+option add *app*opt*list*height      30 widgetDefault
+option add *app*input*Entry*width    50 widgetDefault
 
 namespace eval app {
-    variable inputBox ""
     variable maxLogLines 1000
+    variable input ""
     variable widget
     array set widget {}
 }    
@@ -42,16 +42,16 @@ proc app::init {} {
 
     CreateToplevel .app.opt "options" {wm withdraw .app.opt}
     CreateListbox .app.opt.opt list
-    CreateButtons .app.opt.btn hide "hide" {wm withdraw .app.opt}
+    CreateButtons .app.opt.btn hide "close" {wm withdraw .app.opt}
     pack .app.opt.opt -fill both -expand true
     pack .app.opt.btn -fill x
     set app::widget(opt) .app.opt.opt
-    trace add variable td::options write [namespace code UpdateOptions]
 
     wm deiconify .app
     update
 
     td::setLogCallback [namespace code UpdateLog]
+    td::setOptionsCallback [namespace code UpdateOptions]
     td::receiveBgStart
 }
 
@@ -65,17 +65,34 @@ proc app::createClient {} {
         messageBox "warning" warning "client already created as #$td::clientId"
     } else {
         td::createClient
+        send "create client" "getOption" "name" [jsonString "version"]
+    }
+}
+
+proc app::send {title type args} {
+    popup open $title "sending $type ..." "close"
+    set extra [td::send $type {*}$args]
+    while {[popup active]} {
+        # popup grabs events, call receive directly
+        td::receive $td::receiveBgTimeout
+        set response [td::received $extra]
+        if {$response ne ""} {
+            popup update $title "response to $type\n[string range $response 0 256]" "Ok"
+            break
+        }
+        update
     }
 }
 
 proc app::completeAuth {} {
+    set title "complete auth"
     switch -- $td::authorizationState {
         "authorizationStateClosed" {
             tk_messageBox -parent .app -icon info -message "client is closed, create new client"
         }
         "authorizationStateWaitTdlibParameters" {
-            if {[inputBox "complete auth" "api id" cfg::api_id "api hash" cfg::api_hash]} {
-                td::send "setTdlibParameters" \
+            if {[input $title "api id" cfg::api_id "api hash" cfg::api_hash]} {
+                send $title "setTdlibParameters" \
                         "database_directory"   [jsonString $cfg::database_directory] \
                         "use_message_database"             $cfg::use_message_database \
                         "use_secret_chats"                 $cfg::use_secret_chats \
@@ -88,39 +105,39 @@ proc app::completeAuth {} {
             }
         }
         "authorizationStateWaitPhoneNumber" {
-            if {[inputBox "complete auth" "your phone number" cfg::phone_number]} {
-                td::send "setAuthenticationPhoneNumber" \
+            if {[input $title "your phone number" cfg::phone_number]} {
+                send $title "setAuthenticationPhoneNumber" \
                         "phone_number" [jsonString $cfg::phone_number]
             }
         }
         "authorizationStateWaitEmailAddress" {
-            if {[inputBox "complete auth" "your email address" cfg::email_address]} {
-                td::send "setAuthenticationEmailAddress" \
+            if {[input $title "your email address" cfg::email_address]} {
+                send $title "setAuthenticationEmailAddress" \
                         "email_address" [jsonString $cfg::email_address]
             }
         }
         "authorizationStateWaitEmailCode" {
-            if {[inputBox "complete auth" "email authentication code you received" cfg::code]} {
-                td::send "emailAddressAuthenticationCode" \
+            if {[input $title "email authentication code you received" cfg::code]} {
+                send $title "emailAddressAuthenticationCode" \
                         "code" [jsonString $cfg::code]
             }
         }
         "authorizationStateWaitCode" {
-            if {[inputBox "complete auth" "authentication code you received" cfg::code]} {
-                td::send "checkAuthenticationCode" \
+            if {[input $title "authentication code you received" cfg::code]} {
+                send $title "checkAuthenticationCode" \
                         "code" [jsonString $cfg::code]
             }
         }
         "authorizationStateWaitRegistration" {
-            if {[inputBox "complete auth" "your first name" cfg::first_name "your last name" cfg::last_name]} {
-                td::send "registerUser" \
+            if {[input $title "your first name" cfg::first_name "your last name" cfg::last_name]} {
+                send $title "registerUser" \
                         "first_name" [jsonString $cfg::first_name] \
                         "last_name" [jsonString $cfg::last_name]
             }
         }
         "authorizationStateWaitPassword" {
-            if {[inputBox "complete auth" "your password" cfg::password]} {
-                td::send "checkAuthenticationPassword" \
+            if {[input $title "your password" cfg::password]} {
+                send $title "checkAuthenticationPassword" \
                         "password" [jsonString $cfg::password]
             }
         }
@@ -129,20 +146,16 @@ proc app::completeAuth {} {
 
 proc app::showOptions {} {
     set w [winfo toplevel $app::widget(opt)]
-    if {[winfo ismapped $w]} {
-        wm withdraw $w
-    } else {
-        wm deiconify $w
-    }
+    expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w]}
 }
 
 proc app::messageBox {title icon message} {
     tk_messageBox -parent .app -type ok -title $title -icon $icon -message $message
 }
 
-proc app::inputBox {title args} {
-    set w .app.inputBox
-    CreateToplevel $w $title {set app::button "cancel"}
+proc app::input {title args} {
+    set w .app.input
+    CreateToplevel $w $title {set app::input "cancel"}
     set i 0
     foreach {prompt varname} $args {
         grid [label $w.l$i -text $prompt -anchor e] [entry $w.e$i] -pady 4 -padx 4 -sticky we
@@ -152,17 +165,16 @@ proc app::inputBox {title args} {
         }
         incr i
     }
-    CreateButtons $w.btn \
-            ok "ok" {set app::button "ok"} \
-            cancel "cancel" {set app::button "cancel"}
+    CreateButtons $w.btn ok "ok" {set app::input "ok"} cancel "cancel" {set app::input "cancel"}
     grid $w.btn -columnspan 2 -sticky news
     grid rowconfig $w 0 -weight 1
     grid columnconfig $w 1 -weight 1
     tk::PlaceWindow $w widget .app
+    wm transient $w .app
     tkwait visibility $w
     tk::SetFocusGrab $w $w.btn.ok
-    vwait app::button
-    if {$app::button eq "ok"} {
+    vwait app::input
+    if {$app::input eq "ok"} {
         set i 0
         foreach {- -} $args {
             set var$i [$w.e$i get]
@@ -170,7 +182,39 @@ proc app::inputBox {title args} {
         }
     }
     tk::RestoreFocusGrab $w $w.btn.ok
-    expr {$app::button eq "ok"}
+    expr {$app::input eq "ok"}
+}
+
+proc app::popup {command args} {
+    set w .app.popup
+    switch -- $command {
+        open {
+            set cmd [namespace code [list app::popup close]]
+            lassign $args title message button
+            CreateToplevel $w $title $cmd
+            pack [label $w.msg -text $message] -padx 8 -pady 8 -fill both -expand 1
+            pack [button $w.btn -text $button -command $cmd] -fill x -expand 1
+            tk::PlaceWindow $w widget .app
+            wm transient $w .app
+            tkwait visibility $w
+            tk::SetFocusGrab $w $w.btn
+        }
+        active {
+            return [winfo exists $w]
+        }
+        update {
+            lassign $args title message button
+            wm title $w $title
+            $w.msg configure -text $message
+            $w.btn configure -text $button
+        }
+        close {
+            tk::RestoreFocusGrab $w $w.btn
+        }
+        default {
+            error "invalid app::popup command '$command'"
+        }
+    }
 }
 
 proc app::UpdateLog {message} {
@@ -182,10 +226,10 @@ proc app::UpdateLog {message} {
     $app::widget(log).list see end
 }
 
-proc app::UpdateOptions {name1 name2 op} {
+proc app::UpdateOptions {name value} {
     $app::widget(opt).list delete 0 end
     $app::widget(opt).list insert end \
-        {*}[lmap n [lsort [array names $name1]] {format "%s = %s" $n [set ${name1}($n)]}]
+        {*}[lmap n [dict keys $::td::options] {format "%s: %s" $n [dict get $::td::options $n]}]
 }
 
 proc app::CreateToplevel {w title delete} {
@@ -230,12 +274,11 @@ namespace eval td {
     variable authorizationState ""
     variable connectionState ""
 
-    variable options
-    variable queries
-    array set options {}
-    array set queries {}
+    variable options [dict create]
+    variable queries [dict create]
 
     variable logCallback ""
+    variable optionsCallback ""
     variable receiveBgTimeout 0.01
 }
 
@@ -253,7 +296,6 @@ proc td::execute {type args} {
 proc td::createClient {} {
     if {$td::clientId eq ""} {
         set td::clientId [td_create_client_id]
-        send "getOption" "name" [jsonString "version"]
     }
 }
 
@@ -263,7 +305,7 @@ proc td::send {type args} {
         set json [jsonObject "@type" [jsonString $type] "@extra" $extra {*}$args]
         Log "SEND>" $json
         td_send $td::clientId $json
-        array set td::queries [list $extra ""]
+        dict set td::queries $extra ""
         return $extra
     }
     return ""
@@ -274,7 +316,14 @@ proc td::receive {timeout} {
 }
 
 proc td::received {extra} {
-    expr {[info exists td::queries($extra)] ? $td::queries($extra) : ""}
+    if {[dict exists $td::queries $extra]} {
+        set event [dict get $td::queries $extra]
+        if {$event ne ""} {
+            dict unset td::queries $extra
+            return $event
+        }
+    }
+    return ""
 }
 
 proc td::receiveBgStart {} {
@@ -291,6 +340,10 @@ proc td::setLogCallback {callback} {
     set td::logCallback $callback
 }
 
+proc td::setOptionsCallback {callback} {
+    set td::optionsCallback $callback
+}
+
 proc td::Parse {info json} {
     if {$json eq ""} return
     Log $info $json
@@ -301,7 +354,7 @@ proc td::Parse {info json} {
         return ""
     }
     if {[dict exists $event "@extra"]} {
-        set td::queries([dict get $event "@extra"]) $event
+        dict set td::queries [dict get $event "@extra"] $event
     }
     if {[dict exists $event "@type"]} {
         switch -- [dict get $event "@type"] {
@@ -309,8 +362,11 @@ proc td::Parse {info json} {
                 if {[dict exists $event "name"] && [dict exists $event "value" "value"]} {
                     set n [dict get $event "name"]
                     set v [dict get $event "value" "value"]
-                    if {![info exists td::options($n)] || $td::options($n) ne $v} {
-                        set td::options($n) $v
+                    if {![dict exists $td::options $n] || [dict get $td::options $n] ne $v} {
+                        dict set td::options $n $v
+                        if {$td::optionsCallback ne ""} {
+                            uplevel #0 $td::optionsCallback $n $v
+                        }
                     }
                 }
             }
@@ -339,6 +395,8 @@ proc td::Log {info text} {
 proc td::Fatal {level message} {
     puts stderr "TDLib message: $level $message"
     if {$level == 0} {
+        set td::clientId ""
+        td::receiveBgStop
         tk_messageBox -title "TDLib fatal error" -icon error -message $message
         exit 1
     }
@@ -367,7 +425,10 @@ namespace eval cfg {
             try {
                 set f [open $n "r"]
                 foreach l [split [read $f] \n] {
-                    variable {*}[string trim $l]
+                    set l [string trim $l]
+                    if {$l ne "" && [string range $l 0 0] != "#"} {
+                        variable {*}[lrange $l 0 end]
+                    }
                 }
             } on error message {
                 tk_messageBox -title "config warning" -icon warning \
