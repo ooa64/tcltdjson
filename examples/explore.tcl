@@ -1,12 +1,10 @@
-lappend auto_path [file join [file dirname [info script]] .. win]
+lappend auto_path [file join [file dirname [info script]] ..] [file join [file dirname [info script]] .. win]
 
 package require Tk
 package require json
 package require tdjson
 
 wm withdraw .
-
-catch {console show; update idle}
 
 option add *app*log*list*width      100 widgetDefault
 option add *app*log*list*height      30 widgetDefault
@@ -15,7 +13,6 @@ option add *app*opt*list*height      30 widgetDefault
 option add *app*input*Entry*width    50 widgetDefault
 
 namespace eval app {
-    variable maxLogLines 1000
     variable input ""
     variable widget
     array set widget {}
@@ -24,6 +21,8 @@ namespace eval app {
 proc app::init {} {
     CreateToplevel .app "explore tdjson" [namespace code quit]
     CreateListbox .app.log list
+    pack [checkbutton [frame .app.logbtn].enable -text enabled -variable cfg::_app_log_enabled] \
+            -padx 8 -anchor e
     CreateState .app.auth \
             "client id:" td::clientId \
             "authorization state:" td::authorizationState \
@@ -34,6 +33,7 @@ proc app::init {} {
             showOptions "show options" [namespace code showOptions] \
             quit "quit" [namespace code quit]
     pack .app.log -fill both -expand true
+    pack .app.logbtn -fill x
     pack .app.auth -fill x
     pack .app.btn -fill x
     set app::widget(log) .app.log
@@ -146,7 +146,7 @@ proc app::completeAuth {} {
 
 proc app::showOptions {} {
     set w [winfo toplevel $app::widget(opt)]
-    expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w]}
+    expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w; raise $w]}
 }
 
 proc app::messageBox {title icon message} {
@@ -218,12 +218,14 @@ proc app::popup {command args} {
 }
 
 proc app::UpdateLog {message} {
-    set end [$app::widget(log).list index end]
-    if {$end > $app::maxLogLines} {
-        $app::widget(log).list delete 0 [expr {$end - $app::maxLogLines}]
+    if {$cfg::_app_log_enabled} {
+        set end [$app::widget(log).list index end]
+        if {$end >= $cfg::_app_log_max_lines} {
+            $app::widget(log).list delete 0 [expr {$end - $cfg::_app_log_max_lines}]
+        }
+        $app::widget(log).list insert end $message
+        $app::widget(log).list see end
     }
-    $app::widget(log).list insert end $message
-    $app::widget(log).list see end
 }
 
 proc app::UpdateOptions {name value} {
@@ -354,7 +356,7 @@ proc td::Parse {info json} {
         return ""
     }
     if {[dict exists $event "@extra"]} {
-        dict set td::queries [dict get $event "@extra"] $event
+        dict set td::queries [dict get $event "@extra"] $json
     }
     if {[dict exists $event "@type"]} {
         switch -- [dict get $event "@type"] {
@@ -386,14 +388,14 @@ proc td::Parse {info json} {
 }
 
 proc td::Log {info text} {
-    puts stderr $info:$text
+    # debug $info:$text
     if {$td::logCallback ne ""} {
         uplevel #0 $td::logCallback [list [format "%s %s" $info $text]]
     }
 }
 
 proc td::Fatal {level message} {
-    puts stderr "TDLib message: $level $message"
+    debug "TDLib message: $level $message"
     if {$level == 0} {
         set td::clientId ""
         td::receiveBgStop
@@ -403,6 +405,9 @@ proc td::Fatal {level message} {
 }
 
 namespace eval cfg {
+    variable _debug 0
+    variable _app_log_max_lines 1000
+    variable _app_log_enabled 1
     variable api_id ""
     variable api_hash ""
     variable database_directory "tdlib"
@@ -437,6 +442,16 @@ namespace eval cfg {
                 catch {close $f}
             }
         }
+        if {$cfg::_debug} {
+            if {[info commands console] ne ""} {
+                console show
+            } else {
+                catch {
+                    package require tkcon
+                    tkcon show
+                }
+            }
+        }
     }
 }
 
@@ -459,6 +474,12 @@ proc jsonObject {args} {
         }
     }
     return \{[join $result ,]\}
+}
+
+proc debug {message} {
+    if {$cfg::_debug} {
+        puts stderr $message
+    }
 }
 
 cfg::init
