@@ -15,7 +15,7 @@ test create-1.1 {} {
 } {1}
 
 test execute-1.2.1 {td_execute} {
-   td_execute {{"@type":"testReturnError","error":{"code": 0 "message":"TEST"}}}
+   td_execute {{"@type":"testReturnError","error":{"code":0,"message": "TEST"}}}
 } {{"@type":"error","code":0,"message":"TEST"}}
 
 test execute-1.2.2 {td_execute} {
