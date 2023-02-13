@@ -11,6 +11,9 @@ option add *app*log*list*height      30 widgetDefault
 option add *app*opt*list*width       50 widgetDefault
 option add *app*opt*list*height      30 widgetDefault
 option add *app*input*Entry*width    50 widgetDefault
+option add *app*popup*list*width     50 widgetDefault
+option add *app*popup*list*height    10 widgetDefault
+option add *app*popup*list*font courier widgetDefault
 
 namespace eval app {
     variable input ""
@@ -47,6 +50,9 @@ proc app::init {} {
     pack .app.opt.btn -fill x
     set app::widget(opt) .app.opt.opt
 
+    bind $app::widget(log).list <Double-1> [namespace code showLogLine]
+    bind $app::widget(log).list <Return> [namespace code showLogLine]
+
     wm deiconify .app
     update
 
@@ -70,14 +76,14 @@ proc app::createClient {} {
 }
 
 proc app::send {title type args} {
-    popup open $title "sending $type ..." "close"
+    popup open $title "close" "sending $type..." [td::formatEvent [concat @type $type $args]]
     set extra [td::send $type {*}$args]
     while {[popup active]} {
         # popup grabs events, call receive directly
         td::receive $td::receiveBgTimeout
         set response [td::received $extra]
         if {$response ne ""} {
-            popup update $title "response to $type\n[string range $response 0 256]" "Ok"
+            popup update $title "ok" "response to $type" [FormatEvent $response]
             break
         }
         update
@@ -149,6 +155,13 @@ proc app::showOptions {} {
     expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w; raise $w]}
 }
 
+proc app::showLogLine {} {
+    set s [$app::widget(log).list get active]
+    set i [string first "\{" $s]
+    popup open "log event" "close" [string range $s 0 [expr {$i-2}]] \
+            [FormatEvent [string range $s $i end]]
+}
+
 proc app::messageBox {title icon message} {
     tk_messageBox -parent .app -type ok -title $title -icon $icon -message $message
 }
@@ -190,10 +203,14 @@ proc app::popup {command args} {
     switch -- $command {
         open {
             set cmd [namespace code [list app::popup close]]
-            lassign $args title message button
+            lassign $args title button message text
             CreateToplevel $w $title $cmd
-            pack [label $w.msg -text $message] -padx 8 -pady 8 -fill both -expand 1
-            pack [button $w.btn -text $button -command $cmd] -fill x -expand 1
+            CreateListbox $w.text list; $w.text.list insert end {*}[split $text \n]
+            label $w.msg -text $message
+            button $w.btn -text $button -command $cmd
+            pack $w.msg -padx 8 -pady 8 -fill both -expand 1
+            pack $w.text -fill both -expand 1
+            pack $w.btn -fill x -expand 1
             tk::PlaceWindow $w widget .app
             wm transient $w .app
             tkwait visibility $w
@@ -203,8 +220,10 @@ proc app::popup {command args} {
             return [winfo exists $w]
         }
         update {
-            lassign $args title message button
+            lassign $args title button message text
             wm title $w $title
+            $w.text.list delete 0 end
+            $w.text.list insert end {*}[split $text \n]
             $w.msg configure -text $message
             $w.btn configure -text $button
         }
@@ -214,6 +233,14 @@ proc app::popup {command args} {
         default {
             error "invalid app::popup command '$command'"
         }
+    }
+}
+
+proc app::FormatEvent {json} {
+    if {[catch {json::json2dict $json} result]} {
+        return $result\n$json
+    } else {
+        return [td::formatEvent $result]
     }
 }
 
@@ -235,6 +262,7 @@ proc app::UpdateOptions {name value} {
 }
 
 proc app::CreateToplevel {w title delete} {
+    destroy $w
     toplevel $w
     wm withdraw $w
     wm title $w $title
@@ -346,6 +374,35 @@ proc td::setOptionsCallback {callback} {
     set td::optionsCallback $callback
 }
 
+proc td::formatEvent {dict {indent 4} {level 0}} {
+    set result ""
+    set padding [string repeat " " [expr {$indent * $level}]]
+    dict for {k v} $dict {
+        set s $padding
+        if {![string match "@*" $k]} {
+            append s " "
+        }
+        set snext $s[string repeat " " $indent]
+        set l [expr {$level+1}]
+        if {[catch {dict get $v @type}]} {
+            if {[catch {lmap i $v {dict get $i @type}}]} {
+                if {[string first "\n" $v] < 0} {
+                    append result [format "%s%s: %s\n" $s $k $v]
+                } else {
+                    append result [format "%s%s:\n%s %s\n" $s $k $snext \
+                            [string map [list "\n" "\n$snext "] $v]]
+                }
+            } else {
+                append result [format "%s%s:\n%s" $s $k \
+                        [join [lmap i $v {td::formatEvent $i $indent $l}] ""]]
+            }
+        } else {
+            append result [format "%s%s:\n%s" $s $k [td::formatEvent $v $indent $l]]
+        }
+    }
+    return $result
+}
+
 proc td::Parse {info json} {
     if {$json eq ""} return
     Log $info $json
@@ -395,11 +452,11 @@ proc td::Log {info text} {
 }
 
 proc td::Fatal {level message} {
-    debug "TDLib message: $level $message"
+    debug "tdlib message: $level $message"
     if {$level == 0} {
         set td::clientId ""
         td::receiveBgStop
-        tk_messageBox -title "TDLib fatal error" -icon error -message $message
+        tk_messageBox -title "tdlib fatal error" -icon error -message $message
         exit 1
     }
 }
@@ -436,7 +493,7 @@ namespace eval cfg {
                     }
                 }
             } on error message {
-                tk_messageBox -title "config warning" -icon warning \
+                tk_messageBox -title "explore - config" -icon warning \
                         -message "error opening config file $n:\n$message"
             } finally {
                 catch {close $f}
@@ -480,6 +537,10 @@ proc debug {message} {
     if {$cfg::_debug} {
         puts stderr $message
     }
+}
+
+proc tkerror {args} {
+    tk_messageBox -title "explore - tkerror" -icon error -message $args
 }
 
 cfg::init
