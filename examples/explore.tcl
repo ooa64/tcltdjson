@@ -169,19 +169,20 @@ proc app::messageBox {title icon message} {
 proc app::input {title args} {
     set w .app.input
     CreateToplevel $w $title {set app::input "cancel"}
+    frame $w.ent
     set i 0
     foreach {prompt varname} $args {
-        grid [label $w.l$i -text $prompt -anchor e] [entry $w.e$i] -pady 4 -padx 4 -sticky we
+        grid [label $w.ent.l$i -text $prompt -anchor e] [entry $w.ent.e$i] -pady 4 -padx 4 -sticky we
         upvar $varname var$i
         if {[info exists var$i]} {
-            $w.e$i insert 0 [set var$i]
+            $w.ent.e$i insert 0 [set var$i]
         }
         incr i
     }
+    grid columnconfig $w.ent 1 -weight 1
     CreateButtons $w.btn ok "ok" {set app::input "ok"} cancel "cancel" {set app::input "cancel"}
-    grid $w.btn -columnspan 2 -sticky news
-    grid rowconfig $w 0 -weight 1
-    grid columnconfig $w 1 -weight 1
+    pack $w.ent -fill both -expand 1
+    pack $w.btn -fill x
     tk::PlaceWindow $w widget .app
     wm transient $w .app
     tkwait visibility $w
@@ -190,7 +191,7 @@ proc app::input {title args} {
     if {$app::input eq "ok"} {
         set i 0
         foreach {- -} $args {
-            set var$i [$w.e$i get]
+            set var$i [$w.ent.e$i get]
             incr i
         }
     }
@@ -208,9 +209,9 @@ proc app::popup {command args} {
             CreateListbox $w.text list; $w.text.list insert end {*}[split $text \n]
             label $w.msg -text $message
             button $w.btn -text $button -command $cmd
-            pack $w.msg -padx 8 -pady 8 -fill both -expand 1
+            pack $w.msg -padx 8 -pady 8 -fill x
             pack $w.text -fill both -expand 1
-            pack $w.btn -fill x -expand 1
+            pack $w.btn -fill x
             tk::PlaceWindow $w widget .app
             wm transient $w .app
             tkwait visibility $w
