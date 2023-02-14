@@ -23,7 +23,7 @@ namespace eval app {
 }    
 
 proc app::init {} {
-    CreateToplevel .app "explore tdjson" [namespace code quit]
+    CreateToplevel .app normal "explore tdjson" [namespace code quit]
     CreateScrolled .app.log listbox list
     pack [checkbutton [frame .app.logbtn].enable -text enabled -variable cfg::_app_log_enabled] \
             -padx 8 -anchor e
@@ -44,7 +44,7 @@ proc app::init {} {
     set app::widget(auth) .app.auth
     set app::widget(btn) .app.btn
 
-    CreateToplevel .app.opt "options" {wm withdraw .app.opt}
+    CreateToplevel .app.opt utility "options" {wm withdraw .app.opt}
     CreateScrolled .app.opt.opt listbox list
     CreateButtons .app.opt.btn hide "close" {wm withdraw .app.opt}
     pack .app.opt.opt -fill both -expand true
@@ -55,6 +55,8 @@ proc app::init {} {
     bind $app::widget(log).list <Return> [namespace code showLogLine]
 
     wm deiconify .app
+    focus .app
+    raise .app
     update
 
     td::setLogCallback [namespace code UpdateLog]
@@ -172,7 +174,7 @@ proc app::messageBox {title icon message} {
 
 proc app::input {title args} {
     set w .app.input
-    CreateToplevel $w $title {set app::input "cancel"}
+    CreateToplevel $w dialog $title {set app::input "cancel"}
     frame $w.ent
     set i 0
     foreach {prompt varname} $args {
@@ -208,7 +210,7 @@ proc app::popup {command args} {
     switch -- $command {
         open {
             set cmd [namespace code [list app::popup close]]
-            CreateToplevel $w "popup" $cmd
+            CreateToplevel $w dialog "popup" $cmd
             CreateScrolled $w.txt text text;
             label $w.msg
             button $w.btn -command $cmd
@@ -294,12 +296,15 @@ proc app::UpdateOptions {name value} {
                 {format "%s: %s" $n [dict get $::td::options $n]}]
 }
 
-proc app::CreateToplevel {w title delete} {
+proc app::CreateToplevel {w type title delete} {
     destroy $w
     toplevel $w
     wm withdraw $w
     wm title $w $title
     wm protocol $w WM_DELETE_WINDOW $delete
+    if {$::tcl_platform(platform) eq "unix"} {
+        wm attributes $w -type $type
+    }
 }
 
 proc app::CreateScrolled {w widget name} {
@@ -432,7 +437,7 @@ proc td::getDescription {apiname} {
                 if {[regexp {^\s*//(@.*)$} $s => r]} {
                     append result $r " "
                 } elseif {[regexp {^\s*//-(.*)$} $s => r]} {
-                    append result $r
+                    append result $r " "
                 } else {
                     break
                 }
