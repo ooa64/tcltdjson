@@ -18,19 +18,18 @@ option add *app*popup*text*font TkFixedFont widgetDefault
 
 namespace eval app {
     variable input ""
-    variable widget
-    array set widget {}
+    variable widget; array set widget {}
 }    
 
-proc app::init {} {
+proc ::app::init {} {
     CreateToplevel .app normal "explore tdjson" [namespace code quit]
     CreateScrolled .app.log listbox list
-    pack [checkbutton [frame .app.logbtn].enable -text enabled -variable cfg::_app_log_enabled] \
+    pack [checkbutton [frame .app.logbtn].enable -text enabled -variable ::cfg::_app_log_enabled] \
             -padx 8 -anchor e
     CreateState .app.auth \
-            "client id:" td::clientId \
-            "authorization state:" td::authorizationState \
-            "connection state:" td::connectionState
+            "client id:" ::td::clientId \
+            "authorization state:" ::td::authorizationState \
+            "connection state:" ::td::connectionState
     CreateButtons .app.btn \
             createClient "create client" [namespace code createClient] \
             authAction "complete auth" [namespace code completeAuth] \
@@ -40,176 +39,182 @@ proc app::init {} {
     pack .app.logbtn -fill x
     pack .app.auth -fill x
     pack .app.btn -fill x
-    set app::widget(log) .app.log
-    set app::widget(auth) .app.auth
-    set app::widget(btn) .app.btn
+    set ::app::widget(log) .app.log
+    set ::app::widget(auth) .app.auth
+    set ::app::widget(btn) .app.btn
 
     CreateToplevel .app.opt utility "options" {wm withdraw .app.opt}
     CreateScrolled .app.opt.opt listbox list
     CreateButtons .app.opt.btn hide "close" {wm withdraw .app.opt}
     pack .app.opt.opt -fill both -expand true
     pack .app.opt.btn -fill x
-    set app::widget(opt) .app.opt.opt
+    set ::app::widget(opt) .app.opt.opt
+    set ::app::widget(input) .app.input
+    set ::app::widget(popup) .app.popup
 
-    bind $app::widget(log).list <Double-1> [namespace code showLogLine]
-    bind $app::widget(log).list <Return> [namespace code showLogLine]
+    bind $::app::widget(log).list <Double-1> [namespace code showLogLine]
+    bind $::app::widget(log).list <Return> [namespace code showLogLine]
 
     wm deiconify .app
     focus .app
     raise .app
     update
 
-    td::setLogCallback [namespace code UpdateLog]
-    td::setOptionsCallback [namespace code UpdateOptions]
-    td::receiveBgStart
+    ::td::setLogCallback [namespace code UpdateLog]
+    ::td::setOptionsCallback [namespace code UpdateOptions]
+    ::td::receiveBgStart
 }
 
-proc app::quit {} {
-    td::done
+proc ::app::done {} {
+    ::td::receiveBgStart
+    ::td::setOptionsCallback ""
+    ::td::setLogCallback ""
+    ::destroy .api
+    array unset ::app::widget *
+}
+
+proc ::app::quit {} {
+    ::cfg::save
     exit
 }
 
-proc app::createClient {} {
-    if {$td::clientId ne ""} {
-        messageBox "warning" warning "client already created as #$td::clientId"
+proc ::app::createClient {} {
+    if {$::td::clientId ne ""} {
+        messageBox "warning" warning "client already created as #$::td::clientId"
     } else {
-        td::createClient
+        ::td::createClient
         send "create client" "getOption" "name" [jsonString "version"]
     }
 }
 
-proc app::send {title type args} {
+proc ::app::send {title type args} {
     popup open $title "close" "sending $type..." [td::formatEvent [concat @type $type $args]]
-    popup format
     set extra [td::send $type {*}$args]
     while {[popup active]} {
         # popup grabs events, call receive directly
-        td::receive $td::receiveBgTimeout
+        ::td::receive $::td::receiveBgTimeout
         set response [td::received $extra]
         if {$response ne ""} {
             popup update $title "ok" "response to $type" [FormatEventJson $response]
-            popup format
             break
         }
         update
     }
 }
 
-proc app::completeAuth {} {
+proc ::app::completeAuth {} {
     set title "complete auth"
-    switch -- $td::authorizationState {
+    switch -- $::td::authorizationState {
         "authorizationStateClosed" {
             tk_messageBox -parent .app -icon info -message "client is closed, create new client"
         }
         "authorizationStateWaitTdlibParameters" {
-            if {[input $title "api id" cfg::api_id "api hash" cfg::api_hash]} {
+            if {[input $title "api id" ::cfg::api_id "api hash" ::cfg::api_hash]} {
                 send $title "setTdlibParameters" \
-                        "database_directory"   [jsonString $cfg::database_directory] \
-                        "use_message_database"             $cfg::use_message_database \
-                        "use_secret_chats"                 $cfg::use_secret_chats \
-                        "api_id"                           $cfg::api_id \
-                        "api_hash"             [jsonString $cfg::api_hash] \
-                        "system_language_code" [jsonString $cfg::system_language_code] \
-                        "device_model"         [jsonString $cfg::device_model] \
-                        "application_version"  [jsonString $cfg::application_version] \
-                        "enable_storage_optimizer"         $cfg::enable_storage_optimizer
+                        "database_directory"   [jsonString $::cfg::database_directory] \
+                        "use_message_database"             $::cfg::use_message_database \
+                        "use_secret_chats"                 $::cfg::use_secret_chats \
+                        "api_id"                           $::cfg::api_id \
+                        "api_hash"             [jsonString $::cfg::api_hash] \
+                        "system_language_code" [jsonString $::cfg::system_language_code] \
+                        "device_model"         [jsonString $::cfg::device_model] \
+                        "application_version"  [jsonString $::cfg::application_version] \
+                        "enable_storage_optimizer"         $::cfg::enable_storage_optimizer
             }
         }
         "authorizationStateWaitPhoneNumber" {
-            if {[input $title "your phone number" cfg::phone_number]} {
+            if {[input $title "your phone number" ::cfg::phone_number]} {
                 send $title "setAuthenticationPhoneNumber" \
-                        "phone_number" [jsonString $cfg::phone_number]
+                        "phone_number" [jsonString $::cfg::phone_number]
             }
         }
         "authorizationStateWaitEmailAddress" {
-            if {[input $title "your email address" cfg::email_address]} {
+            if {[input $title "your email address" ::cfg::email_address]} {
                 send $title "setAuthenticationEmailAddress" \
-                        "email_address" [jsonString $cfg::email_address]
+                        "email_address" [jsonString $::cfg::email_address]
             }
         }
         "authorizationStateWaitEmailCode" {
-            if {[input $title "email authentication code you received" cfg::code]} {
+            if {[input $title "email authentication code you received" ::cfg::code]} {
                 send $title "emailAddressAuthenticationCode" \
-                        "code" [jsonString $cfg::code]
+                        "code" [jsonString $::cfg::code]
             }
         }
         "authorizationStateWaitCode" {
-            if {[input $title "authentication code you received" cfg::code]} {
+            if {[input $title "authentication code you received" ::cfg::code]} {
                 send $title "checkAuthenticationCode" \
-                        "code" [jsonString $cfg::code]
+                        "code" [jsonString $::cfg::code]
             }
         }
         "authorizationStateWaitRegistration" {
-            if {[input $title "your first name" cfg::first_name "your last name" cfg::last_name]} {
+            if {[input $title "your first name" ::cfg::first_name "your last name" ::cfg::last_name]} {
                 send $title "registerUser" \
-                        "first_name" [jsonString $cfg::first_name] \
-                        "last_name" [jsonString $cfg::last_name]
+                        "first_name" [jsonString $::cfg::first_name] \
+                        "last_name" [jsonString $::cfg::last_name]
             }
         }
         "authorizationStateWaitPassword" {
-            if {[input $title "your password" cfg::password]} {
+            if {[input $title "your password" ::cfg::password]} {
                 send $title "checkAuthenticationPassword" \
-                        "password" [jsonString $cfg::password]
+                        "password" [jsonString $::cfg::password]
             }
         }
     }
 }
 
-proc app::showOptions {} {
-    set w [winfo toplevel $app::widget(opt)]
+proc ::app::showOptions {} {
+    set w [winfo toplevel $::app::widget(opt)]
     expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w; raise $w]}
 }
 
-proc app::showLogLine {} {
-    set s [$app::widget(log).list get active]
+proc ::app::showLogLine {} {
+    set s [$::app::widget(log).list get active]
     set i [string first "\{" $s]
     popup open "log event" "close" [string range $s 0 [expr {$i-2}]] \
             [FormatEventJson [string range $s $i end]]
-    popup format
 }
 
-proc app::messageBox {title icon message} {
+proc ::app::messageBox {title icon message} {
     tk_messageBox -parent .app -type ok -title $title -icon $icon -message $message
 }
 
-proc app::input {title args} {
-    set w .app.input
-    CreateToplevel $w dialog $title {set app::input "cancel"}
+proc ::app::input {title args} {
+    set w $::app::widget(input)
+    CreateToplevel $w dialog $title {set ::app::input "cancel"}
     frame $w.ent
     set i 0
     foreach {prompt varname} $args {
         grid [label $w.ent.l$i -text $prompt -anchor e] [entry $w.ent.e$i] -pady 4 -padx 4 -sticky we
-        upvar $varname var$i
-        if {[info exists var$i]} {
-            $w.ent.e$i insert 0 [set var$i]
+        if {[info exists $varname]} {
+            $w.ent.e$i insert 0 [set $varname]
         }
         incr i
     }
     grid columnconfig $w.ent 1 -weight 1
-    CreateButtons $w.btn ok "ok" {set app::input "ok"} cancel "cancel" {set app::input "cancel"}
+    CreateButtons $w.btn ok "ok" {set ::app::input "ok"} cancel "cancel" {set ::app::input "cancel"}
     pack $w.ent -fill both -expand 1
     pack $w.btn -fill x
     tk::PlaceWindow $w widget .app
     wm transient $w .app
     tkwait visibility $w
     tk::SetFocusGrab $w $w.btn.ok
-    vwait app::input
-    if {$app::input eq "ok"} {
+    vwait ::app::input
+    if {$::app::input eq "ok"} {
         set i 0
-        foreach {- -} $args {
-            set var$i [$w.ent.e$i get]
+        foreach {- varname} $args {
+            set $varname [$w.ent.e$i get]
             incr i
         }
     }
     tk::RestoreFocusGrab $w $w.btn.ok
-    expr {$app::input eq "ok"}
+    expr {$::app::input eq "ok"}
 }
 
-proc app::popup {command args} {
-    set w .app.popup
+proc ::app::popup {command args} {
+    set w $::app::widget(popup)
     switch -- $command {
         open {
-            set cmd [namespace code [list app::popup close]]
+            set cmd [namespace code [list ::app::popup close]]
             CreateToplevel $w dialog "popup" $cmd
             CreateScrolled $w.txt text text;
             label $w.msg
@@ -221,7 +226,7 @@ proc app::popup {command args} {
             wm transient $w .app
             tkwait visibility $w
             tk::SetFocusGrab $w $w.btn
-            tailcall app::popup update {*}$args
+            tailcall ::app::popup update {*}$args
         }
         active {
             return [winfo exists $w]
@@ -238,38 +243,36 @@ proc app::popup {command args} {
             $w.txt.text tag bind "info" <Return> [namespace code {ShowPopupInfo @%x,%y}]
             $w.txt.text tag bind "info" <Enter> {%W configure -cursor "hand2"}
             $w.txt.text tag bind "info" <Leave> {%W configure -cursor ""}
-        }
-        format {
             FormatPopupText
         }
         close {
             tk::RestoreFocusGrab $w $w.btn
         }
         default {
-            error "invalid app::popup command '$command'"
+            error "invalid ::app::popup command '$command'"
         }
     }
 }
 
-proc app::FormatPopupText {} {
-    set w .app.popup.txt.text
+proc ::app::FormatPopupText {} {
+    set w $::app::widget(popup).txt.text
     foreach i [$w search -all -regexp {@type: \w+$} 1.0] {
         $w tag add "info" $i [regsub {\d+$} $i end]
     }
 }
 
-proc app::ShowPopupInfo {point} {
+proc ::app::ShowPopupInfo {point} {
     set indices [.app.popup.txt.text tag prevrange "info" $point+1char]
     set text [.app.popup.txt.text get {*}$indices]
     if {[regexp {@type: (\w+)$} $text => type]} {
         set lines [td::getDescription $type]
         if {[llength $lines]} {
-            tk_messageBox -title $type -message [join $lines \n]
+            tk_messageBox -title $type -message [join $lines \n\n]
         }
     }
 }
 
-proc app::FormatEventJson {json} {
+proc ::app::FormatEventJson {json} {
     if {[catch {json::json2dict $json} result]} {
         return $result\n$json
     } else {
@@ -277,26 +280,26 @@ proc app::FormatEventJson {json} {
     }
 }
 
-proc app::UpdateLog {message} {
-    if {$cfg::_app_log_enabled} {
-        set end [$app::widget(log).list index end]
-        if {$end >= $cfg::_app_log_max_lines} {
-            $app::widget(log).list delete 0 \
-                    [expr {$end - $cfg::_app_log_max_lines}]
+proc ::app::UpdateLog {message} {
+    if {$::cfg::_app_log_enabled} {
+        set end [$::app::widget(log).list index end]
+        if {$end >= $::cfg::_app_log_max_lines} {
+            $::app::widget(log).list delete 0 \
+                    [expr {$end - $::cfg::_app_log_max_lines}]
         }
-        $app::widget(log).list insert end $message
-        $app::widget(log).list see end
+        $::app::widget(log).list insert end $message
+        $::app::widget(log).list see end
     }
 }
 
-proc app::UpdateOptions {name value} {
-    $app::widget(opt).list delete 0 end
-    $app::widget(opt).list insert end \
+proc ::app::UpdateOptions {name value} {
+    $::app::widget(opt).list delete 0 end
+    $::app::widget(opt).list insert end \
         {*}[lmap n [dict keys $::td::options] \
                 {format "%s: %s" $n [dict get $::td::options $n]}]
 }
 
-proc app::CreateToplevel {w type title delete} {
+proc ::app::CreateToplevel {w type title delete} {
     destroy $w
     toplevel $w
     wm withdraw $w
@@ -307,7 +310,7 @@ proc app::CreateToplevel {w type title delete} {
     }
 }
 
-proc app::CreateScrolled {w widget name} {
+proc ::app::CreateScrolled {w widget name} {
     frame $w
     $widget $w.$name \
             -xscrollcommand [list $w.sx set] \
@@ -321,7 +324,7 @@ proc app::CreateScrolled {w widget name} {
     grid rowconfigure $w 0 -weight 1
 }
 
-proc app::CreateState {w args} {
+proc ::app::CreateState {w args} {
     frame $w
     set i 0
     foreach {label varname} $args {
@@ -331,7 +334,7 @@ proc app::CreateState {w args} {
     }
 }
 
-proc app::CreateButtons {w args} {
+proc ::app::CreateButtons {w args} {
     frame $w
     pack {*}[lmap {name text command} $args \
             {button $w.$name -text $text -command $command}] -fill x -side left -expand 1
@@ -356,84 +359,93 @@ namespace eval td {
     variable receiveBgTimeout 0.01
 }
 
-proc td::init {} {
-    if {$cfg::_td_api_file ne ""} {
-        set td::apiFile [OpenApi $cfg::_td_api_file]
+proc ::td::init {} {
+    if {$::cfg::_td_api_file ne ""} {
+        set ::td::apiFile [OpenApi $::cfg::_td_api_file]
     }
-    td_set_log_message_callback 0 td::Fatal
+    td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
+    return ""
 }
 
-proc td::done {} {
-    td::receiveBgStop
+proc ::td::done {} {
+    ::td::receiveBgStop
     td_set_log_message_callback 0
-    set td::clientId ""
-    catch {close {$td::apiFile ne ""}}
+    setLogCallback ""
+    setOptionsCallback ""
+    set ::td::clientId ""
+    set ::td::authorizationState ""
+    set ::td::connectionState ""
+    foreach v {options queries types classes functions descriptions} {
+        set ::td::$v [dict create]
+    }
+    catch {close $::td::apiFile}
+    set ::td::apiFile ""
 }
 
-proc td::execute {type args} {
+proc ::td::execute {type args} {
     set json [jsonObject "@type" [jsonString $type] {*}$args]
     Log "EXEC>" $json
     Parse "EXEC<" [td_execute $json]
 }
 
-proc td::createClient {} {
-    if {$td::clientId eq ""} {
-        set td::clientId [td_create_client_id]
+proc ::td::createClient {} {
+    if {$::td::clientId eq ""} {
+        set ::td::clientId [td_create_client_id]
     }
 }
 
-proc td::send {type args} {
-    if {$td::clientId ne ""} {
+proc ::td::send {type args} {
+    if {$::td::clientId ne ""} {
         set extra [clock clicks]
         set json [jsonObject "@type" [jsonString $type] "@extra" $extra {*}$args]
         Log "SEND>" $json
-        td_send $td::clientId $json
-        dict set td::queries $extra ""
+        td_send $::td::clientId $json
+        dict set ::td::queries $extra ""
         return $extra
     }
     return ""
 }
 
-proc td::receive {timeout} {
+proc ::td::receive {timeout} {
     Parse "RECV<" [td_receive $timeout]
 }
 
-proc td::received {extra} {
-    if {[dict exists $td::queries $extra]} {
-        set event [dict get $td::queries $extra]
+proc ::td::received {extra} {
+    if {[dict exists $::td::queries $extra]} {
+        set event [dict get $::td::queries $extra]
         if {$event ne ""} {
-            dict unset td::queries $extra
+            dict unset ::td::queries $extra
             return $event
         }
     }
     return ""
 }
 
-proc td::receiveBgStart {} {
-    receive $td::receiveBgTimeout
+proc ::td::receiveBgStart {} {
+    receive $::td::receiveBgTimeout
     update
     after idle [namespace code receiveBgStart]
 }
 
-proc td::receiveBgStop {} {
+proc ::td::receiveBgStop {} {
     after cancel [namespace code receiveBgStart]
 }
 
-proc td::setLogCallback {callback} {
-    set td::logCallback $callback
+proc ::td::setLogCallback {callback} {
+    set ::td::logCallback $callback
 }
 
-proc td::setOptionsCallback {callback} {
-    set td::optionsCallback $callback
+proc ::td::setOptionsCallback {callback} {
+    set ::td::optionsCallback $callback
 }
 
-proc td::getDescription {apiname} {
-    if {$td::apiFile ne "" && [dict exists $td::descriptions $apiname]} {
+proc ::td::getDescription {apiname} {
+    if {$::td::apiFile ne "" && [dict exists $::td::descriptions $apiname]} {
         try {
             set result ""
-            seek $td::apiFile [dict get $td::descriptions $apiname]
-            while {[gets $td::apiFile s] >= 0} {
+            seek $::td::apiFile [dict get $::td::descriptions $apiname]
+            while {[gets $::td::apiFile s] >= 0} {
                 if {[regexp {^\s*//(@.*)$} $s => r]} {
                     append result $r " "
                 } elseif {[regexp {^\s*//-(.*)$} $s => r]} {
@@ -446,14 +458,14 @@ proc td::getDescription {apiname} {
         } on error {message} {
             tk_messageBox -title "explore - api" -icon warning \
                     -message "error reading api file:\n$message"
-            catch {close $td::apiFile}
-            set td::apiFile ""
+            catch {close $::td::apiFile}
+            set ::td::apiFile ""
             return ""
         }
     }
 }
 
-proc td::formatEvent {dict {indent 4} {level 0}} {
+proc ::td::formatEvent {dict {indent 4} {level 0}} {
     set result ""
     set padding [string repeat " " [expr {$indent * $level}]]
     dict for {k v} $dict {
@@ -482,7 +494,7 @@ proc td::formatEvent {dict {indent 4} {level 0}} {
     return $result
 }
 
-proc td::Parse {info json} {
+proc ::td::Parse {info json} {
     if {$json eq ""} return
     Log $info $json
     try {
@@ -492,7 +504,7 @@ proc td::Parse {info json} {
         return ""
     }
     if {[dict exists $event "@extra"]} {
-        dict set td::queries [dict get $event "@extra"] $json
+        dict set ::td::queries [dict get $event "@extra"] $json
     }
     if {[dict exists $event "@type"]} {
         switch -- [dict get $event "@type"] {
@@ -500,22 +512,22 @@ proc td::Parse {info json} {
                 if {[dict exists $event "name"] && [dict exists $event "value" "value"]} {
                     set n [dict get $event "name"]
                     set v [dict get $event "value" "value"]
-                    if {![dict exists $td::options $n] || [dict get $td::options $n] ne $v} {
-                        dict set td::options $n $v
-                        if {$td::optionsCallback ne ""} {
-                            uplevel #0 $td::optionsCallback $n $v
+                    if {![dict exists $::td::options $n] || [dict get $::td::options $n] ne $v} {
+                        dict set ::td::options $n $v
+                        if {$::td::optionsCallback ne ""} {
+                            uplevel #0 $::td::optionsCallback $n $v
                         }
                     }
                 }
             }
             "updateAuthorizationState" {
                 if {[dict exists $event "authorization_state" "@type"]} {
-                    set td::authorizationState [dict get $event "authorization_state" "@type"]
+                    set ::td::authorizationState [dict get $event "authorization_state" "@type"]
                 }
             }
             "updateConnectionState" {
                 if {[dict exists $event "state" "@type"]} {
-                    set td::connectionState [dict get $event "state" "@type"]
+                    set ::td::connectionState [dict get $event "state" "@type"]
                 }
             }
         }
@@ -523,7 +535,7 @@ proc td::Parse {info json} {
     return $event
 }
 
-proc td::OpenApi {filename} {
+proc ::td::OpenApi {filename} {
     variable types
     variable classes
     variable functions
@@ -566,17 +578,17 @@ proc td::OpenApi {filename} {
     }
 }
 
-proc td::Log {info text} {
+proc ::td::Log {info text} {
     # debug $info:$text
-    if {$td::logCallback ne ""} {
-        uplevel #0 $td::logCallback [list [format "%s %s" $info $text]]
+    if {$::td::logCallback ne ""} {
+        uplevel #0 $::td::logCallback [list [format "%s %s" $info $text]]
     }
 }
 
-proc td::Fatal {level message} {
+proc ::td::Fatal {level message} {
     debug "tdlib message: $level $message"
     if {$level == 0} {
-        td::done
+        ::td::done
         tk_messageBox -title "tdlib fatal error" -icon error -message $message
         exit 1
     }
@@ -585,55 +597,81 @@ proc td::Fatal {level message} {
 namespace eval cfg {
     variable _debug 0
     variable _td_api_file ""
+    variable _cfg_var_file ""
+    variable _cfg_cfg_file ""
     variable _app_log_max_lines 1000
     variable _app_log_enabled 1
-    variable api_id ""
-    variable api_hash ""
+    # NOTE: defaults for auth
     variable database_directory "tdlib"
     variable use_message_database 1
     variable use_secret_chats 1
     variable system_language_code "en"
     variable device_model "Desktop"
     variable application_version "1.0"
-    variable enable_storage_optimizer 1
-    variable phone_number ""
-    variable email_address ""
-    variable code ""
-    variable first_name ""
-    variable last_name ""
-    variable password ""
+    variable enable_storage_optimizer 1    
+}
 
-    proc init {} {
-        load
-        if {$cfg::_debug} {
-            if {[info commands console] ne ""} {
-                console show
-            } else {
-                catch {
-                    package require tkcon
-                    tkcon show
-                }
+proc ::cfg::init {} {
+    set rootname [file rootname [info script]]
+    set ::cfg::_cfg_var_file [load [lindex $::argv 1] $rootname.var]
+    set ::cfg::_cfg_cfg_file [load [lindex $::argv 0] $rootname.cfg]
+    if {$::cfg::_debug} {
+        if {[info commands console] ne ""} {
+            console show
+        } else {
+            catch {
+                package require tkcon
+                tkcon show
             }
         }
     }
+}
 
-    proc load {} {
-        set n [expr {$::argc ? [lindex $::argv 0] : "[file rootname [info script]].cfg"}]
-        if {$::argc || [file exists $n]} {
-            try {
-                set f [open $n "r"]
-                foreach l [split [read $f] \n] {
-                    set l [string trim $l]
-                    if {$l ne "" && [string range $l 0 0] != "#"} {
-                        variable {*}[lrange $l 0 end]
-                    }
+proc cfg::done {} {
+    unset {*}[info vars ::cfg::*]
+    variable _debug 0
+    variable _td_api_file ""
+    variable _cfg_var_file ""
+    variable _cfg_cfg_file ""
+    variable _app_log_max_lines 1000
+    variable _app_log_enabled 1
+}
+
+proc ::cfg::load {fname1 fname2} {
+    set fname [expr {$fname1 ne "" ? $fname1 : $fname2}]
+    if {$fname1 ne "" || [file exists $fname]} {
+        try {
+            set f [open $fname "r"]
+            foreach l [split [read $f] \n] {
+                set l [string trim $l]
+                if {$l ne "" && [string range $l 0 0] != "#"} {
+                    variable {*}[lrange $l 0 end]
                 }
-            } on error {message} {
-                tk_messageBox -title "explore - config" -icon warning \
-                        -message "error loading config file $n:\n$message"
-            } finally {
-                catch {close $f}
             }
+        } on error {message} {
+            tk_messageBox -title "explore - config" -icon warning \
+                    -message "error loading config file $fname:\n$message"
+        } finally {
+            catch {close $f}
+        }
+    }
+    return $fname
+}
+
+proc ::cfg::save {} {
+    if {$::cfg::_cfg_var_file ne ""} {
+        try {
+            set f [open $::cfg::_cfg_var_file "w"]
+            foreach v [lsort [info vars ::cfg::*]] {
+                if {[info exists $v]} {
+                    puts $f [list [namespace tail $v] [set $v]]
+                }
+            }
+        } on error {message} {
+            tk_messageBox -title "explore - config" -icon warning \
+                    -message "error saving config file $::cfg::_cfg_var_file:\n$message"
+        } finally {
+            catch {close $f}
         }
     }
 }
@@ -660,7 +698,7 @@ proc jsonObject {args} {
 }
 
 proc debug {message} {
-    if {$cfg::_debug} {
+    if {$::cfg::_debug} {
         puts stderr $message
     }
 }
