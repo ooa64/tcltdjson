@@ -265,10 +265,7 @@ proc ::app::ShowPopupInfo {point} {
     set indices [.app.popup.txt.text tag prevrange "info" $point+1char]
     set text [.app.popup.txt.text get {*}$indices]
     if {[regexp {@type: (\w+)$} $text => type]} {
-        set lines [td::getDescription $type]
-        if {[llength $lines]} {
-            tk_messageBox -title $type -message [join $lines \n\n]
-        }
+        tk_messageBox -title $type -message [join [td::getDescription $type] \n\n]
     }
 }
 
@@ -369,8 +366,7 @@ proc ::td::init {} {
 }
 
 proc ::td::done {} {
-    ::td::receiveBgStop
-    td_set_log_message_callback 0
+    receiveBgStop
     setLogCallback ""
     setOptionsCallback ""
     set ::td::clientId ""
@@ -381,6 +377,7 @@ proc ::td::done {} {
     }
     catch {close $::td::apiFile}
     set ::td::apiFile ""
+    td_set_log_message_callback 0
 }
 
 proc ::td::execute {type args} {
