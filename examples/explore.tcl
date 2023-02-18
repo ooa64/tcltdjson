@@ -6,19 +6,46 @@ package require tdjson
 
 wm withdraw .
 
+foreach list {options users chats} {
+    option add *app*$list*list*width 50 widgetDefault
+    option add *app*$list*list*height 30 widgetDefault
+    unset list
+}
 option add *app*log*list*width 100 widgetDefault
 option add *app*log*list*height 30 widgetDefault
-option add *app*opt*list*width 50 widgetDefault
-option add *app*opt*list*height 30 widgetDefault
 option add *app*input*Entry*width 50 widgetDefault
 option add *app*popup*text*width 50 widgetDefault
 option add *app*popup*text*height 10 widgetDefault
 option add *app*popup*text*wrap none widgetDefault
 option add *app*popup*text*font TkFixedFont widgetDefault
+option add *Dialog.msg.wrapLength 5i startupFile
+option add *Dialog.dtl.wrapLength 5i startupFile
 
 namespace eval app {
     variable input ""
     variable widget; array set widget {}
+    variable actions; array set actions {
+        options {
+            {getOption name}
+        }
+        users {
+            {getUser user_id}
+            {getUserFullInfo user_id}
+            {getUserSupportInfo user_id}
+        }
+        chats {
+            {getChat chat_id}
+            {getChatAdministrators chat_id}
+            {getChatAvailableMessageSenders chat_id}
+            {getChatInviteLink chat_id}
+            {getChatInviteLinkCounts chat_id}
+            {getChatListsToAddChat chat_id}
+            {getChatPinnedMessage chat_id}
+            {getChatSponsoredMessages chat_id}
+            {getChatStatistics chat_id is_dark 0}
+        }
+    }
+    lappend actions(chats) [list getChatMessageByDate chat_id date [clock seconds]]
 }    
 
 proc ::app::init {} {
@@ -31,44 +58,63 @@ proc ::app::init {} {
             "authorization state:" ::td::authorizationState \
             "connection state:" ::td::connectionState
     CreateButtons .app.btn \
-            createClient "create client" [namespace code createClient] \
-            authAction "complete auth" [namespace code completeAuth] \
-            showOptions "show options" [namespace code showOptions] \
+            createClient "create client" [namespace code {createClient}] \
+            authAction "complete auth" [namespace code {completeAuth}] \
+            showOptions "show options" [namespace code {showList options}] \
+            showUsers "show users" [namespace code {showList users}] \
+            showChats "show chats" [namespace code {showList chats}] \
             quit "quit" [namespace code quit]
     pack .app.log -fill both -expand true
     pack .app.logbtn -fill x
     pack .app.auth -fill x
     pack .app.btn -fill x
+    bind .app.log.list <Double-1> [namespace code showLogLine]
+    bind .app.log.list <Return> [namespace code showLogLine]
     set ::app::widget(log) .app.log
     set ::app::widget(auth) .app.auth
     set ::app::widget(btn) .app.btn
 
-    CreateToplevel .app.opt utility "options" {wm withdraw .app.opt}
-    CreateScrolled .app.opt.opt listbox list
-    CreateButtons .app.opt.btn hide "close" {wm withdraw .app.opt}
-    pack .app.opt.opt -fill both -expand true
-    pack .app.opt.btn -fill x
-    set ::app::widget(opt) .app.opt.opt
+    foreach list {options users chats} {
+        CreateToplevel .app.$list utility $list [list wm withdraw .app.$list]
+        CreateScrolled .app.$list.f listbox list
+        CreateButtons .app.$list.btn hide "close" [list wm withdraw .app.$list]
+        pack .app.$list.f -fill both -expand true
+        pack .app.$list.btn -fill x
+        menu .app.$list.actions -tearoff 0
+        foreach action $::app::actions($list) {
+            .app.$list.actions add command -label [lindex $action 0] \
+                    -command [namespace code [list InvokeListAction $list $action]]
+        }
+        bind .app.$list.f.list <3> \
+                {%W selection clear 0 end; %W selection set @%x,%y; %W activate @%x,%y; focus %W}
+        bind .app.$list.f.list <3> "+tk_popup .app.$list.actions %X %Y"
+        set action [lindex $::app::actions($list) 0]
+        bind .app.$list.f.list <Double-1> [namespace code [list InvokeListAction $list $action]]
+        bind .app.$list.f.list <Return> [namespace code [list InvokeListAction $list $action]]
+        set ::app::widget($list) .app.$list.f
+    }
+
     set ::app::widget(input) .app.input
     set ::app::widget(popup) .app.popup
-
-    bind $::app::widget(log).list <Double-1> [namespace code showLogLine]
-    bind $::app::widget(log).list <Return> [namespace code showLogLine]
 
     wm deiconify .app
     focus .app
     raise .app
     update
 
+    foreach list {options users chats} {
+        ::td::setListCallback $list [namespace code [list UpdateList $list]]
+    }
     ::td::setLogCallback [namespace code UpdateLog]
-    ::td::setOptionsCallback [namespace code UpdateOptions]
     ::td::receiveBgStart
 }
 
 proc ::app::done {} {
     ::td::receiveBgStart
-    ::td::setOptionsCallback ""
     ::td::setLogCallback ""
+    foreach list {options users chats} {
+        ::td::setListCallback $list ""
+    }
     ::destroy .api
     array unset ::app::widget *
 }
@@ -162,8 +208,8 @@ proc ::app::completeAuth {} {
     }
 }
 
-proc ::app::showOptions {} {
-    set w [winfo toplevel $::app::widget(opt)]
+proc ::app::showList {list} {
+    set w [winfo toplevel $::app::widget($list)]
     expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w; raise $w]}
 }
 
@@ -265,7 +311,7 @@ proc ::app::ShowPopupInfo {point} {
     set indices [.app.popup.txt.text tag prevrange "info" $point+1char]
     set text [.app.popup.txt.text get {*}$indices]
     if {[regexp {@type: (\w+)$} $text => type]} {
-        tk_messageBox -title $type -message [join [td::getDescription $type] \n\n]
+        tk_messageBox -title "tdjson api" -message $type -detail [join [td::getDescription $type] \n\n]
     }
 }
 
@@ -289,11 +335,19 @@ proc ::app::UpdateLog {message} {
     }
 }
 
-proc ::app::UpdateOptions {name value} {
-    $::app::widget(opt).list delete 0 end
-    $::app::widget(opt).list insert end \
-        {*}[lmap n [dict keys $::td::options] \
-                {format "%s: %s" $n [dict get $::td::options $n]}]
+proc ::app::UpdateList {list name value} {
+    $::app::widget($list).list delete 0 end
+    $::app::widget($list).list insert end \
+        {*}[lmap n [dict keys [set ::td::$list]] \
+                {format "%s: %s" $n [dict get [set ::td::$list] $n]}]
+}
+
+proc ::app::InvokeListAction {list action} {
+    set i [$::app::widget($list).list index active]
+    if {$i ne "" && [regexp {^([^:]+):} [$::app::widget($list).list get $i] => v]} {
+        lassign $action request n
+        send "query $list: $v" $request $n [jsonString $v] {*}[lrange $action 2 end]
+    }
 }
 
 proc ::app::CreateToplevel {w type title delete} {
@@ -343,6 +397,8 @@ namespace eval td {
     variable connectionState ""
 
     variable options [dict create]
+    variable users [dict create]
+    variable chats [dict create]
     variable queries [dict create]
 
     variable types [dict create]
@@ -351,8 +407,8 @@ namespace eval td {
     variable descriptions [dict create]
     variable apiFile ""
 
-    variable logCallback ""
-    variable optionsCallback ""
+    variable logCallback "";
+    variable listCallback; array set listCallback {options "" users "" chats ""}
     variable receiveBgTimeout 0.01
 }
 
@@ -368,11 +424,11 @@ proc ::td::init {} {
 proc ::td::done {} {
     receiveBgStop
     setLogCallback ""
-    setOptionsCallback ""
+    array set listCallback {options "" users "" chats ""}
     set ::td::clientId ""
     set ::td::authorizationState ""
     set ::td::connectionState ""
-    foreach v {options queries types classes functions descriptions} {
+    foreach v {options chats users queries types classes functions descriptions} {
         set ::td::$v [dict create]
     }
     catch {close $::td::apiFile}
@@ -433,8 +489,8 @@ proc ::td::setLogCallback {callback} {
     set ::td::logCallback $callback
 }
 
-proc ::td::setOptionsCallback {callback} {
-    set ::td::optionsCallback $callback
+proc ::td::setListCallback {list callback} {
+    set ::td::listCallback($list) $callback
 }
 
 proc ::td::getDescription {apiname} {
@@ -511,9 +567,31 @@ proc ::td::Parse {info json} {
                     set v [dict get $event "value" "value"]
                     if {![dict exists $::td::options $n] || [dict get $::td::options $n] ne $v} {
                         dict set ::td::options $n $v
-                        if {$::td::optionsCallback ne ""} {
-                            uplevel #0 $::td::optionsCallback $n $v
-                        }
+                        InvokeListCallback options $n $v
+                    }
+                }
+            }
+            "updateUser" {
+                if {[dict exists $event "user" "id"] && \
+                        [dict exists $event "user" "first_name"] && \
+                        [dict exists $event "user" "last_name"]} {
+                    set n [dict get $event "user" "id"]
+                    set v [format "%s %s" \
+                            [dict get $event "user" "first_name"] \
+                            [dict get $event "user" "last_name"]]
+                    if {![dict exists $::td::users $n] || [dict get $::td::users $n] ne $v} {
+                        dict set ::td::users $n $v
+                        InvokeListCallback users $n $v
+                    }
+                }
+            }
+            "updateNewChat" {
+                if {[dict exists $event "chat" "id"] && [dict exists $event "chat" "title"]} {
+                    set n [dict get $event "chat" "id"]
+                    set v [dict get $event "chat" "title"]
+                    if {![dict exists $::td::chats $n] || [dict get $::td::chats $n] ne $v} {
+                        dict set ::td::chats $n $v
+                        InvokeListCallback chats $n $v
                     }
                 }
             }
@@ -530,6 +608,12 @@ proc ::td::Parse {info json} {
         }
     }
     return $event
+}
+
+proc td::InvokeListCallback {list name value} {
+    if {$::td::listCallback($list) ne ""} {
+        uplevel #0 $::td::listCallback($list) [list $name $value]
+    }
 }
 
 proc ::td::OpenApi {filename} {
@@ -660,7 +744,7 @@ proc ::cfg::save {} {
         try {
             set f [open $::cfg::_cfg_var_file "w"]
             foreach v [lsort [info vars ::cfg::*]] {
-                if {[info exists $v]} {
+                if {[info exists $v] && [namespace tail $v] ni {password code}} {
                     puts $f [list [namespace tail $v] [set $v]]
                 }
             }
