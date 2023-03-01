@@ -36,7 +36,7 @@ namespace eval app {
         users {
             {getUser user_id}
             {getUserFullInfo user_id}
-            {getUserProfilePhotos user_id}
+            {getUserProfilePhotos user_id offset 0 limit 99}
             {getUserSupportInfo user_id}
             {getGroupsInCommon user_id offset_chat_id 0 limit 99}
         }
@@ -338,10 +338,10 @@ proc ::app::UpdateList {list name value} {
 
 proc ::app::InvokeListAction {list action} {
     set i [$::app::widget($list).list index active]
-    if {$i ne "" && [regexp {^([^:]+):} [$::app::widget($list).list get $i] => v]} {
-        lassign $action t n
-        request open "query $list: $v" "func" $t /$t/$n $v \
-                {*}[join [lmap {i j} [lrange $action 2 end] {list /$t/$n $j}]]
+    if {$i ne "" && [regexp {^([^:]+):} [$::app::widget($list).list get $i] => id]} {
+        lassign $action func key
+        request open "query $list: $id" "func" $func /$func/$key $id \
+                {*}[join [lmap {n v} [lrange $action 2 end] {list /$func/$n $v}]]
     }
 }
 
