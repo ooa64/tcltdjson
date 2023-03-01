@@ -131,11 +131,12 @@ proc ::app::quit {} {
 }
 
 proc ::app::createClient {} {
-    if {$::td::clientId ne ""} {
-        messageBox "warning" warning "client already created as #$::td::clientId"
-    } else {
+    if {$::td::clientId eq ""} {
         ::td::createClient
         send "create client" "@type" [jsonString "getOption"] "name" [jsonString "version"]
+    } elseif {"yes" eq [tk_messageBox -parent .app -type yesno -title warning -icon warning \
+            -message "client already created. destroy?"]} {
+        send "destroy client" "@type" [jsonString "close"]
     }
 }
 
@@ -156,21 +157,25 @@ proc ::app::send {title args} {
 
 proc ::app::completeAuth {} {
     if {$::td::authorizationState eq "authorizationStateClosed"} {
-        ::td::destroyClient
         tk_messageBox -parent .app -icon info -message "client is closed, create new client"
-        return            
-    }
-    array set map {
-        "authorizationStateWaitTdlibParameters" "setTdlibParameters"
-        "authorizationStateWaitPhoneNumber" "setAuthenticationPhoneNumber"
-        "authorizationStateWaitEmailAddress" "setAuthenticationEmailAddress"
-        "authorizationStateWaitEmailCode" "emailAddressAuthenticationCode"
-        "authorizationStateWaitCode" "checkAuthenticationCode"
-        "authorizationStateWaitRegistration" "registerUser"
-        "authorizationStateWaitPassword" "checkAuthenticationPassword"
-    }
-    if {[info exists map($::td::authorizationState)]} {
-        request open "auth" "func" $map($::td::authorizationState)
+    } elseif {$::td::authorizationState eq "authorizationStateClosed"} {
+        if {"yes" eq [tk_messageBox -parent .app -type yesno -title warning -icon warning \
+                -message "client already authorized. logout?"]} {
+            send "logout client" "@type" [jsonString "logOut"]
+        }
+    } else {
+        array set map {
+            "authorizationStateWaitTdlibParameters" "setTdlibParameters"
+            "authorizationStateWaitPhoneNumber" "setAuthenticationPhoneNumber"
+            "authorizationStateWaitEmailAddress" "setAuthenticationEmailAddress"
+            "authorizationStateWaitEmailCode" "emailAddressAuthenticationCode"
+            "authorizationStateWaitCode" "checkAuthenticationCode"
+            "authorizationStateWaitRegistration" "registerUser"
+            "authorizationStateWaitPassword" "checkAuthenticationPassword"
+        }
+        if {[info exists map($::td::authorizationState)]} {
+            request open "auth" "func" $map($::td::authorizationState)
+        }
     }
 }
 
@@ -184,10 +189,6 @@ proc ::app::showLogLine {} {
     set i [string first "\{" $s]
     popup open "log event" "close" [string range $s 0 [expr {$i-2}]] \
             [FormatEventJson [string range $s $i end]]
-}
-
-proc ::app::messageBox {title icon message} {
-    tk_messageBox -parent .app -type ok -title $title -icon $icon -message $message
 }
 
 proc ::app::request {command args} {
@@ -837,6 +838,9 @@ proc ::td::Parse {info json} {
             "updateAuthorizationState" {
                 if {[dict exists $event "authorization_state" "@type"]} {
                     set ::td::authorizationState [dict get $event "authorization_state" "@type"]
+                    if {$::td::authorizationState eq "authorizationStateClosed"} {
+                        ::td::destroyClient
+                    }
                 }
             }
             "updateConnectionState" {
