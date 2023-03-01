@@ -226,9 +226,7 @@ proc ::app::request {command args} {
             }
             if {[info exists ::cfg::request(func)]} {
                 $w.btn.func insert end $::cfg::request(func)
-                #update; event generate $w <Motion> -warp 1 \
-                #        -x [winfo rootx $w.btn.select] -y [winfo rooty $w.btn.select]
-                {*}$select
+                ::app::request::InsertFunction $w.txt.text $w.btn $::cfg::request(func)
             }
         }
         send {
@@ -392,12 +390,12 @@ proc ::app::request::SelectFunction {w btn} {
     if {[llength $funcs] == 1} {
         InsertFunction $w $btn [lindex $funcs 0]
     } elseif {[llength $funcs] >= 2} {
+        $btn.menu delete 0 end
         foreach i [lsort $funcs]  {
             $btn.menu add command -label $i -command \
                     [namespace code [list InsertFunction $w $btn $i]]
         }
         tk_popup $btn.menu [winfo rootx $btn.select] [winfo rooty $btn.select]
-        after idle [list $btn.menu delete 0 end]
     }
 }
 
