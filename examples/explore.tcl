@@ -132,7 +132,7 @@ proc ::app::completeAuth {} {
             "authorizationStateWaitTdlibParameters" "setTdlibParameters"
             "authorizationStateWaitPhoneNumber" "setAuthenticationPhoneNumber"
             "authorizationStateWaitEmailAddress" "setAuthenticationEmailAddress"
-            "authorizationStateWaitEmailCode" "emailAddressAuthenticationCode"
+            "authorizationStateWaitEmailCode" "checkAuthenticationEmailCode"
             "authorizationStateWaitCode" "checkAuthenticationCode"
             "authorizationStateWaitRegistration" "registerUser"
             "authorizationStateWaitPassword" "checkAuthenticationPassword"
@@ -401,7 +401,7 @@ proc ::app::request::InsertElement {w level align parent name type} {
         }
         "value" - "unknown" {
             if {$class eq "unknown"} {
-                set info "alpha"
+                set info "print"
             }
             entry $w.$path -width 20 \
                     -textvariable ::cfg::request($path) \
@@ -548,7 +548,7 @@ proc ::app::request::getJson {w} {
                     append json "\"$::cfg::request($txt)\","
                 }
                 "value" {
-                    if {$info in {"ascii" "alpha"}} {
+                    if {$info in {"ascii" "print"}} {
                         append json "\"$::cfg::request($txt)\","
                     } elseif {$::cfg::request($txt) ne ""} {
                         append json $::cfg::request($txt) ","
@@ -599,10 +599,10 @@ namespace eval td {
     variable classes [dict create]
     variable functions [dict create]
     variable descriptions [dict create]
-    variable apiFile ""
+    variable apiFile "td_api.tl"
     variable apiBasic; array set apiBasic {
         "double" "double"
-        "string" "alpha"
+        "string" "print"
         "int32" "integer"
         "int53" "entier"
         "int64" "entier"
@@ -617,8 +617,36 @@ namespace eval td {
 }
 
 proc ::td::init {} {
-    if {$::cfg::_td_api_file ne ""} {
+    if {[file exists $::cfg::_td_api_file]} {
         set ::td::apiFile [OpenApi $::cfg::_td_api_file]
+    } else {
+        tk_messageBox -title "warning" -icon warning \
+                -message "api file '$::cfg::_td_api_file' is missing, \
+functionality will be limited.\
+latest api file is available on github\n\
+https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
+        dict set ::td::functions "setTdlibParameters" {
+            api_id:int32
+            api_hash:string
+            system_language_code:string
+            device_model:string
+            application_version:string
+            Ok
+        }
+        dict set ::td::functions "setAuthenticationPhoneNumber" {phone_number:string Ok}
+        dict set ::td::functions "setAuthenticationEmailAddress" {email_address:string Ok}
+        dict set ::td::functions "checkAuthenticationEmailCode" {code:EmailAddressAuthentication Ok}
+        dict set ::td::functions "checkAuthenticationCode" {code:string Ok}
+        dict set ::td::functions "checkAuthenticationPassword" {password:string Ok}
+        dict set ::td::functions "registerUser" {first_name:string last_name:string Ok}
+        dict set ::td::types "emailAddressAuthenticationCode" {code:string EmailAddressAuthentication}
+        dict set ::td::types "emailAddressAuthenticationAppleId" {token:string EmailAddressAuthentication}
+        dict set ::td::types "emailAddressAuthenticationGoogleId" {token:string EmailAddressAuthentication}
+        dict set ::td::classes "EmailAddressAuthentication" {
+            emailAddressAuthenticationCode
+            emailAddressAuthenticationAppleId
+            emailAddressAuthenticationGoogleId
+        }
     }
     td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
