@@ -159,6 +159,7 @@ proc ::app::popup {command args} {
     set w $::app::widget(popup)
     switch -- $command {
         open {
+            # args: title button message text
             set close {::app::popup close}
             CreateToplevel $w dialog "popup" $close
             CreateScrolled $w.txt text text
@@ -207,10 +208,11 @@ proc ::app::request {command args} {
     switch -- $command {
         open {
             # args: title name1 value1
+            set title [lindex $args 0]
             set select [list ::app::request::selectFunction $w.txt.text $w.btn]
-            set send [list ::app::request "send"]
+            set send [list ::app::request "send" $title]
             set close [list ::app::request "close"]
-            CreateToplevel $w dialog [lindex $args 0] $close
+            CreateToplevel $w dialog $title $close
             CreateScrolled $w.txt text text
             frame $w.btn
             entry $w.btn.func
@@ -469,7 +471,7 @@ proc ::app::request::UpdateArray {w level parent type offset} {
     set tags [$w tag names]
     for {set i 0} {$i < $::cfg::request($parent#size)} {incr i} {
         if {"$parent/$i" ni $tags} {
-            InsertElement $w $level 0 $parent $i $type
+            InsertElement $w $level [expr {[string length $i]+1}] $parent $i $type
             # NOTE: parent tags expantion
             foreach t [$w tag names $first-1char] {
                 if {[string first $t $parent] == 0} {
