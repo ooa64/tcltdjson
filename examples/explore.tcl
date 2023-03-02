@@ -3,6 +3,7 @@ lappend auto_path [file join [file dirname [info script]] ..] [file join [file d
 package require Tk
 package require json
 package require tdjson
+catch {package require Thread}
 
 wm withdraw .
 
@@ -613,7 +614,12 @@ namespace eval td {
     variable logCallback "";
     variable listCallback; array set listCallback {options "" users "" chats ""}
 
-    variable receiveBgTimeout 0.01
+    if {[info commands ::thread::create] ne ""} {
+        variable receiveBgTimeout 1.00
+        variable receiveBgThread ""
+    } else {
+        variable receiveBgTimeout 0.01
+    }
 }
 
 proc ::td::init {} {
@@ -623,7 +629,7 @@ proc ::td::init {} {
         tk_messageBox -title "warning" -icon warning \
                 -message "api file '$::cfg::_td_api_file' is missing, \
 functionality will be limited.\
-latest api file is available on github\n\
+latest api file is available on github:
 https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
         dict set ::td::functions "setTdlibParameters" {
             api_id:int32
@@ -648,6 +654,10 @@ https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
             emailAddressAuthenticationGoogleId
         }
     }
+    if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread eq ""} {
+        set ::td::receiveBgThread [::thread::create]
+        thread::send $::td::receiveBgThread {package require tdjson}
+    }
     td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
     return ""
@@ -657,6 +667,10 @@ proc ::td::done {} {
     receiveBgStop
     setLogCallback ""
     array set listCallback {options "" users "" chats ""}
+    if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread ne ""} {
+        thread::release $::td::receiveBgThread
+        set ::td::receiveBgThread ""
+    }
     set ::td::clientId ""
     set ::td::authorizationState ""
     set ::td::connectionState ""
@@ -695,7 +709,14 @@ proc ::td::send {args} {
 }
 
 proc ::td::receive {timeout} {
-    Parse "RECV<" [td_receive $timeout]
+    if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread ne ""} {
+        thread::send -async $::td::receiveBgThread \
+                [list td_receive $timeout] ::td::receiveBgResult
+        vwait ::td::receiveBgResult
+        Parse "RECV<" $::td::receiveBgResult
+    } else {
+        Parse "RECV<" [td_receive $timeout]
+    }
 }
 
 proc ::td::received {extra} {
