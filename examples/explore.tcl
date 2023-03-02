@@ -102,7 +102,7 @@ proc ::app::init {} {
     raise .app
 
     ::td::setLogCallback {::app::UpdateLog}
-    ::td::receiveBgStart
+    ::td::startReceiveBg
 }
 
 proc ::app::quit {} {
@@ -264,7 +264,7 @@ proc ::app::send {title args} {
     while {[popup active]} {
         # popup grabs events, call receive directly
         ::td::receive $::td::receiveBgTimeout
-        set response [td::received $extra]
+        set response [td::getReceived $extra]
         if {$response ne ""} {
             popup update $title "ok" "response" [FormatEventJson $response]
             break
@@ -663,37 +663,18 @@ https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     return ""
 }
 
-proc ::td::done {} {
-    receiveBgStop
-    setLogCallback ""
-    array set listCallback {options "" users "" chats ""}
-    if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread ne ""} {
-        thread::release $::td::receiveBgThread
-        set ::td::receiveBgThread ""
-    }
-    set ::td::clientId ""
-    set ::td::authorizationState ""
-    set ::td::connectionState ""
-    foreach v {queries types classes functions descriptions} {
-        set ::td::$v [dict create]
-    }
-    catch {close $::td::apiFile}
-    set ::td::apiFile ""
-    td_set_log_message_callback 0
-}
-
-proc ::td::execute {type args} {
-    set json [jsonObject "@type" [jsonString $type] {*}$args]
-    Log "EXEC>" $json
-    Parse "EXEC<" [td_execute $json]
-}
-
 proc ::td::createClient {} {
     set ::td::clientId [td_create_client_id]
 }
 
 proc ::td::destroyClient {} {
     set ::td::clientId ""
+}
+
+proc ::td::execute {type args} {
+    set json [jsonObject "@type" [jsonString $type] {*}$args]
+    Log "EXEC>" $json
+    Parse "EXEC<" [td_execute $json]
 }
 
 proc ::td::send {args} {
@@ -719,7 +700,7 @@ proc ::td::receive {timeout} {
     }
 }
 
-proc ::td::received {extra} {
+proc ::td::getReceived {extra} {
     if {[dict exists $::td::queries $extra]} {
         set event [dict get $::td::queries $extra]
         if {$event ne ""} {
@@ -730,14 +711,14 @@ proc ::td::received {extra} {
     return ""
 }
 
-proc ::td::receiveBgStart {} {
+proc ::td::startReceiveBg {} {
     receive $::td::receiveBgTimeout
     update
-    after idle {::td::receiveBgStart}
+    after idle {::td::startReceiveBg}
 }
 
-proc ::td::receiveBgStop {} {
-    after cancel {::td::receiveBgStart}
+proc ::td::stopReceiveBg {} {
+    after cancel {::td::startReceiveBg}
 }
 
 proc ::td::setLogCallback {callback} {
@@ -933,7 +914,8 @@ proc ::td::Log {info text} {
 proc ::td::Fatal {level message} {
     debug "tdlib message: $level $message"
     if {$level == 0} {
-        ::td::done
+        ::td::stopReceiveBg
+        ::td::destroyClient
         tk_messageBox -title "tdlib fatal error" -icon error -message $message
         exit 1
     }
