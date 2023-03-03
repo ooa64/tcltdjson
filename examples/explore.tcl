@@ -12,17 +12,15 @@ foreach i {options users chats} {
     option add *app*$i*list*height 30 widgetDefault
     unset i
 }
-option add *app*log*list*width 100 widgetDefault
-option add *app*log*list*height 30 widgetDefault
-option add *app*input*Entry*width 50 widgetDefault
-option add *app*popup*text*width 50 widgetDefault
-option add *app*popup*text*height 20 widgetDefault
-option add *app*popup*text*wrap none widgetDefault
-option add *app*popup*text*font TkFixedFont widgetDefault
-option add *app*request*text.width 50 widgetDefault
-option add *app*request*text.height 20 widgetDefault
-option add *app*request*text.wrap none widgetDefault
-option add *app*request*text.font TkFixedFont widgetDefault
+option add *App*log*list*width 100 widgetDefault
+option add *App*log*list*height 30 widgetDefault
+option add *App*Popup*text*width 50 widgetDefault
+option add *App*Popup*text*height 20 widgetDefault
+option add *App*Popup*text*wrap none widgetDefault
+option add *App*Popup*text*font TkFixedFont widgetDefault
+option add *App*Request*text.width 50 widgetDefault
+option add *App*Request*text.height 20 widgetDefault
+option add *App*Request*text.wrap none widgetDefault
 option add *Dialog.msg.wrapLength 5i startupFile
 option add *Dialog.dtl.wrapLength 5i startupFile
 
@@ -52,10 +50,8 @@ namespace eval app {
 }    
 
 proc ::app::init {} {
-    CreateToplevel .app normal "explore tdjson" {::app::quit}
+    CreateToplevel .app App normal "explore tdjson" {::app::quit}
     CreateScrolled .app.log listbox list
-    pack [checkbutton [frame .app.logbtn].enable -text enabled -variable ::cfg::_app_log_enabled] \
-            -padx 8 -anchor e
     CreateState .app.auth \
             "client id:" ::td::clientId \
             "authorization state:" ::td::authorizationState \
@@ -68,6 +64,8 @@ proc ::app::init {} {
             showChats "show chats" {::app::showList chats} \
             request "request" {::app::request open request} \
             quit "quit" {::app::quit}
+    pack [checkbutton [frame .app.logbtn].enabled -text enabled -variable ::cfg::_app_log_enabled] \
+            -padx 8 -anchor e
     pack .app.log -fill both -expand true
     pack .app.logbtn .app.auth .app.btn -fill x
     bind .app.log.list <Double-1> {::app::showLogLine}
@@ -77,7 +75,7 @@ proc ::app::init {} {
     set ::app::widget(btn) .app.btn
 
     foreach i {options users chats} {
-        CreateToplevel .app.$i utility $i [list wm withdraw .app.$i]
+        CreateToplevel .app.$i List utility $i [list wm withdraw .app.$i]
         CreateScrolled .app.$i.f listbox list
         CreateButtons .app.$i.btn hide "close" [list wm withdraw .app.$i]
         pack .app.$i.f -fill both -expand true
@@ -145,24 +143,24 @@ proc ::app::completeAuth {} {
 }
 
 proc ::app::showList {list} {
-    set w [winfo toplevel $::app::widget($list)]
-    expr {[winfo ismapped $w] ? [wm withdraw $w] : [wm deiconify $w; raise $w]}
+    tk::PlaceWindow [winfo toplevel $::app::widget($list)] widget .app
 }
 
 proc ::app::showLogLine {} {
     set s [$::app::widget(log).list get active]
     set i [string first "\{" $s]
-    popup open "log event" "close" [string range $s 0 [expr {$i-2}]] \
+    popup open w "log event" "close" [string range $s 0 [expr {$i-2}]] \
             [FormatEventJson [string range $s $i end]]
 }
 
-proc ::app::popup {command args} {
-    set w $::app::widget(popup)
+proc ::app::popup {command w args} {
     switch -- $command {
         open {
             # args: title button message text
-            set close {::app::popup close}
-            CreateToplevel $w dialog "popup" $close
+            set wname $w; unset w; upvar $wname w
+            set w $::app::widget(popup)[NextId]
+            set close [list ::app::popup close $w]
+            CreateToplevel $w Popup dialog "popup" $close
             CreateScrolled $w.txt text text
             label $w.msg
             button $w.btn -command $close
@@ -171,11 +169,8 @@ proc ::app::popup {command args} {
             pack $w.btn -fill x
 
             tk::PlaceWindow $w widget .app
-            wm transient $w .app
-            tkwait visibility $w
-            tk::SetFocusGrab $w $w.btn
 
-            tailcall ::app::popup update {*}$args
+            tailcall ::app::popup update $w {*}$args
         }
         active {
             return [winfo exists $w]
@@ -195,7 +190,6 @@ proc ::app::popup {command args} {
             request::configureInfo $w.txt.text "info"
         }
         close {
-            tk::RestoreFocusGrab $w $w.btn
             destroy $w
         }
         default {
@@ -213,7 +207,7 @@ proc ::app::request {command args} {
             set select [list ::app::request::selectFunction $w.txt.text $w.btn]
             set send [list ::app::request "send" $title]
             set close [list ::app::request "close"]
-            CreateToplevel $w dialog $title $close
+            CreateToplevel $w Request dialog $title $close
             CreateScrolled $w.txt text text
             frame $w.btn
             entry $w.btn.func
@@ -259,14 +253,14 @@ proc ::app::request {command args} {
 }
 
 proc ::app::send {title args} {
-    popup open $title "close" "sending..." [FormatEventJson [jsonObject {*}$args]]
+    popup open w $title "close" "sending..." [FormatEventJson [jsonObject {*}$args]]
     set extra [td::send {*}$args]
-    while {[popup active]} {
+    while {[popup active $w]} {
         # popup grabs events, call receive directly
         ::td::receive $::td::receiveBgTimeout
         set response [td::getReceived $extra]
         if {$response ne ""} {
-            popup update $title "ok" "response" [FormatEventJson $response]
+            popup update $w $title "ok" "response" [FormatEventJson $response]
             break
         }
         update
@@ -317,9 +311,9 @@ proc ::app::InvokeListAction {list action} {
     }
 }
 
-proc ::app::CreateToplevel {w type title delete} {
+proc ::app::CreateToplevel {w class type title delete} {
 #   destroy $w
-    toplevel $w
+    toplevel $w -class $class
     wm withdraw $w
     wm title $w $title
     wm protocol $w WM_DELETE_WINDOW $delete
@@ -357,6 +351,8 @@ proc ::app::CreateButtons {w args} {
     pack {*}[lmap {name text command} $args \
             {button $w.$name -text $text -command $command}] -fill x -side left -expand 1
 }
+
+coroutine ::app::NextId apply {{} {yield; while true {yield [incr i]}}}
 
 proc ::app::request::selectFunction {w btn} {
     set func [$btn.func get]
@@ -936,13 +932,18 @@ proc ::cfg::init {} {
     set ::cfg::_cfg_var_file [load [lindex $::argv 1] $rootname.var]
     set ::cfg::_cfg_cfg_file [load [lindex $::argv 0] $rootname.cfg]
     if {$::cfg::_debug} {
-        if {[info commands console] ne ""} {
-            console show
-        } else {
+        if {$::tcl_platform(platform) eq "windows"} {
+            catch {console show}
             catch {
-                package require tkcon
-                tkcon show
+                package require dde
+                dde servername ExploreDebug
+                debug "ddeserver started as ExploreDebug"
             }
+        }
+        catch {
+            package require tkconclient
+            tkconclient::start 12345
+            debug "tkconclient started at port 12345"
         }
     }
 }
