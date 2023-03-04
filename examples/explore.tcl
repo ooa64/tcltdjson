@@ -378,7 +378,7 @@ proc ::app::request::insertFunction {w btn func} {
     $w configure -state normal
     $w tag delete "" {*}[lsearch -all -inline [$w tag names] "/*"]
     $w delete 1.0 end
-    InsertElement $w 0 0 "" $func $func
+    InsertElement $w -1 0 "" $func $func
     $w configure -state disabled
 }
 
@@ -652,7 +652,8 @@ https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     }
     if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread eq ""} {
         set ::td::receiveBgThread [::thread::create]
-        thread::send $::td::receiveBgThread {package require tdjson}
+        thread::send $::td::receiveBgThread [list set auto_path $::auto_path]
+        thread::send $::td::receiveBgThread [list package require tdjson]
     }
     td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
