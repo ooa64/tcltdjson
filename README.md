@@ -1,6 +1,6 @@
 # tcltdjson
 
-Simple wrapper for Telegram JSON API.
+Simple wrapper for Telegram JSON API (https://tdlib.github.io/td/build.html).
 
 To install on unix/mac/cygwin/msys:
 

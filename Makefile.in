@@ -355,18 +355,24 @@ dist: dist-clean $(srcdir)/manifest.uuid
 
 	$(INSTALL_DATA_DIR) $(DIST_DIR)/tclconfig
 	$(DIST_INSTALL_DATA) $(srcdir)/tclconfig/README.txt \
-	    $(srcdir)/manifest.uuid \
+	    $(srcdir)/tclconfig/license.terms \
 	    $(srcdir)/tclconfig/tcl.m4 $(srcdir)/tclconfig/install-sh \
 	    $(DIST_DIR)/tclconfig/
 
 	# Extension files
 	$(DIST_INSTALL_DATA) \
-	    $(srcdir)/ChangeLog \
-	    $(srcdir)/README.sha \
-	    $(srcdir)/license.terms \
-	    $(srcdir)/README \
+	    $(srcdir)/README.md \
+	    $(srcdir)/LICENSE \
+	    $(srcdir)/manifest.uuid \
 	    $(srcdir)/pkgIndex.tcl.in \
 	    $(DIST_DIR)/
+
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/examples
+	$(DIST_INSTALL_DATA) \
+	    $(srcdir)/examples/example.tcl \
+	    $(srcdir)/examples/explore.tcl \
+	    $(srcdir)/examples/explore.cfg \
+	    $(DIST_DIR)/examples
 
 	list='demos doc generic library macosx tests unix win'; \
 	for p in $$list; do \
