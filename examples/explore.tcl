@@ -1,5 +1,3 @@
-lappend auto_path [file join [file dirname [info script]] ..] [file join [file dirname [info script]] .. win]
-
 package require Tk
 package require json
 package require tdjson
@@ -14,6 +12,7 @@ foreach i {options users chats} {
 }
 option add *App*log*list*width 100 widgetDefault
 option add *App*log*list*height 30 widgetDefault
+option add *App*auth*Entry*width 40 widgetDefault
 option add *App*Popup*text*width 50 widgetDefault
 option add *App*Popup*text*height 20 widgetDefault
 option add *App*Popup*text*wrap none widgetDefault
@@ -25,7 +24,9 @@ option add *Dialog.msg.wrapLength 5i startupFile
 option add *Dialog.dtl.wrapLength 5i startupFile
 
 namespace eval app {
-    namespace eval request {}
+    namespace eval request {
+        variable input; array set input {}
+    }
     variable widget; array set widget {}
     variable actions; array set actions {
         options {
@@ -62,12 +63,17 @@ proc ::app::init {} {
             showOptions "show options" {::app::showList options} \
             showUsers "show users" {::app::showList users} \
             showChats "show chats" {::app::showList chats} \
-            request "request" {::app::request open request} \
+            request "request" {::app::request open w "request"} \
             quit "quit" {::app::quit}
-    pack [checkbutton [frame .app.logbtn].enabled -text enabled -variable ::cfg::_app_log_enabled] \
-            -padx 8 -anchor e
-    pack .app.log -fill both -expand true
-    pack .app.logbtn .app.auth .app.btn -fill x
+    frame .app.logbtn
+    button .app.logbtn.clear -text "clear log" -command {.app.log.list delete 0 end}
+    checkbutton .app.logbtn.enabled -text "enabled" -variable ::cfg::_app_log_enabled
+    pack .app.logbtn.clear .app.logbtn.enabled -ipadx 8 -side left
+    grid .app.log  - - -sticky news
+    grid .app.auth x .app.logbtn -sticky n
+    grid .app.btn  - - -sticky we
+    grid columnconfigure .app 1 -weight 1
+    grid rowconfigure .app 0 -weight 1
     bind .app.log.list <Double-1> {::app::showLogLine}
     bind .app.log.list <Return> {::app::showLogLine}
     set ::app::widget(log) .app.log
@@ -83,28 +89,28 @@ proc ::app::init {} {
         menu .app.$i.actions -tearoff 0
         foreach action $::app::actions($i) {
             .app.$i.actions add command -label [lindex $action 0] \
-                    -command [list ::app::InvokeListAction $i $action]
+                    -command [list ::app::invokeListAction $i $action]
         }
         bind .app.$i.f.list <3> \
                 {%W selection clear 0 end; %W selection set @%x,%y; %W activate @%x,%y; focus %W}
         bind .app.$i.f.list <3> \
                 [list +tk_popup .app.$i.actions %X %Y]
-        ::td::setListCallback $i [list ::app::UpdateList $i]
+        ::td::setListCallback $i [list ::app::updateList $i]
         set ::app::widget($i) .app.$i.f
     }
-
-    set ::app::widget(request) .app.request
-    set ::app::widget(popup) .app.popup
 
     wm deiconify .app
     raise .app
 
-    ::td::setLogCallback {::app::UpdateLog}
+    set ::app::widget(request) .app.request
+    set ::app::widget(popup) .app.popup
+
+    ::td::setLogCallback {::app::updateLog}
     ::td::startReceiveBg
 }
 
 proc ::app::quit {} {
-    ::cfg::save
+    ::td::done
     exit
 }
 
@@ -137,7 +143,7 @@ proc ::app::completeAuth {} {
             "authorizationStateWaitPassword" "checkAuthenticationPassword"
         }
         if {[info exists map($::td::authorizationState)]} {
-            request open "auth" "func" $map($::td::authorizationState)
+            request open w "auth" "func" $map($::td::authorizationState)
         }
     }
 }
@@ -158,7 +164,7 @@ proc ::app::popup {command w args} {
         open {
             # args: title button message text
             set wname $w; unset w; upvar $wname w
-            set w $::app::widget(popup)[NextId]
+            set w $::app::widget(popup)[::cfg::nextId]
             set close [list ::app::popup close $w]
             CreateToplevel $w Popup dialog "popup" $close
             CreateScrolled $w.txt text text
@@ -169,6 +175,7 @@ proc ::app::popup {command w args} {
             pack $w.btn -fill x
 
             tk::PlaceWindow $w widget .app
+            wm transient $w .app
 
             tailcall ::app::popup update $w {*}$args
         }
@@ -198,15 +205,16 @@ proc ::app::popup {command w args} {
     }
 }
 
-proc ::app::request {command args} {
-    set w $::app::widget(request)
+proc ::app::request {command w args} {
     switch -- $command {
         open {
             # args: title name1 value1
+            set wname $w; unset w; upvar $wname w
+            set w $::app::widget(request)[::cfg::nextId]
             set title [lindex $args 0]
+            set send [list ::app::request "send" $w $title]
+            set close [list ::app::request "close" $w]
             set select [list ::app::request::selectFunction $w.txt.text $w.btn]
-            set send [list ::app::request "send" $title]
-            set close [list ::app::request "close"]
             CreateToplevel $w Request dialog $title $close
             CreateScrolled $w.txt text text
             frame $w.btn
@@ -219,31 +227,33 @@ proc ::app::request {command args} {
             pack $w.txt -fill both -expand yes
             pack $w.btn -fill x
             bind $w.btn.func <Return> $select
-            bind $w.btn.func <FocusIn> {%W selection from 0; %W selection to end}
+            bind $w.btn.func <FocusIn> {%W selection range 0 end}
 
             tk::PlaceWindow $w widget .app
             wm transient $w .app
-            tkwait visibility $w
-            tk::SetFocusGrab $w $w.btn.func
+            focus $w.btn.func
 
             set bg [$w.txt.text cget -background]
-            option add *app*request*text*Entry*background $bg widgetDefault
-            option add *app*request*text*Spinbox*readonlyBackground $bg widgetDefault
+            option add *App*Request*text*Entry*background $bg widgetDefault
+            option add *App*Request*text*Spinbox*readonlyBackground $bg widgetDefault
+
+            set id [request::id $w]
             foreach {n v} [lrange $args 1 end] {
-                set ::cfg::request($n) $v
+                set ::app::request::input($id,$n) $v
             }
-            if {[info exists ::cfg::request(func)]} {
-                request::insertFunction $w.txt.text $w.btn $::cfg::request(func)
+            if {[info exists ::app::request::input($id,func)]} {
+                request::insertFunction $w.txt.text $w.btn $::app::request::input($id,func)
             }
             request::configureInfo $w.txt.text "info"
         }
         send {
             # args: title
             after idle [list ::app::send [lindex $args 0] [::app::request::getJson $w.txt.text]]
-            tailcall request close
+            tailcall request "close" $w
         }
         close {
-            tk::RestoreFocusGrab $w $w.btn.func
+            set id [request::id $w]
+            array unset ::app::request::input $id,*
             destroy $w
         }
         default {
@@ -254,28 +264,16 @@ proc ::app::request {command args} {
 
 proc ::app::send {title args} {
     popup open w $title "close" "sending..." [FormatEventJson [jsonObject {*}$args]]
-    set extra [td::send {*}$args]
-    while {[popup active $w]} {
-        # popup grabs events, call receive directly
-        ::td::receive $::td::receiveBgTimeout
-        set response [td::getReceived $extra]
-        if {$response ne ""} {
-            popup update $w $title "ok" "response" [FormatEventJson $response]
-            break
-        }
-        update
-    }
+    ::td::setEventCallback [td::send {*}$args] [list apply {
+        {w title response} {
+            if {[popup active $w]} {
+                popup update $w $title "ok" "response" [FormatEventJson $response]
+            }
+        } ::app
+    } $w $title]
 }
 
-proc ::app::FormatEventJson {json} {
-    if {[catch {json::json2dict $json} result]} {
-        return $result\n$json
-    } else {
-        return [td::formatEvent $result]
-    }
-}
-
-proc ::app::UpdateLog {message} {
+proc ::app::updateLog {message} {
     if {$::cfg::_app_log_enabled} {
         set w $::app::widget(log).list
         set last [$w index end]
@@ -289,7 +287,7 @@ proc ::app::UpdateLog {message} {
     }
 }
 
-proc ::app::UpdateList {list name value} {
+proc ::app::updateList {list name value} {
     set s "$name: $value"
     set w $::app::widget($list).list
     set i [lsearch -glob [$w get 0 end] "$name: *"]
@@ -301,18 +299,17 @@ proc ::app::UpdateList {list name value} {
     }
 }
 
-proc ::app::InvokeListAction {list action} {
+proc ::app::invokeListAction {list action} {
     set w $::app::widget($list).list
     set i [$w index active]
     if {$i ne "" && [regexp {^([^:]+):} [$w get $i] => id]} {
         lassign $action func key
-        request open "query $list: $id" "func" $func /$func/$key $id \
+        request open w "query $list: $id" "func" $func /$func/$key $id \
                 {*}[join [lmap {n v} [lrange $action 2 end] {list /$func/$n $v}]]
     }
 }
 
 proc ::app::CreateToplevel {w class type title delete} {
-#   destroy $w
     toplevel $w -class $class
     wm withdraw $w
     wm title $w $title
@@ -340,19 +337,26 @@ proc ::app::CreateState {w args} {
     frame $w
     set i 0
     foreach {label varname} $args {
-        grid [label $w.l$i -text $label -anchor "e"] \
-                [label $w.s$i -textvariable $varname -anchor "w"] -sticky we
+        label $w.l$i -text $label -anchor "e"
+        entry $w.e$i -textvariable $varname -state readonly
+        grid $w.l$i $w.e$i -sticky we
         incr i
     }
 }
 
 proc ::app::CreateButtons {w args} {
     frame $w
-    pack {*}[lmap {name text command} $args \
-            {button $w.$name -text $text -command $command}] -fill x -side left -expand 1
+    pack {*}[lmap {name text command} $args {button $w.$name -text $text -command $command}] \
+            -fill x -side left -expand 1
 }
 
-coroutine ::app::NextId apply {{} {yield; while true {yield [incr i]}}}
+proc ::app::FormatEventJson {json} {
+    if {[catch {json::json2dict $json} result]} {
+        return $result\n$json
+    } else {
+        return [td::formatEvent $result]
+    }
+}
 
 proc ::app::request::selectFunction {w btn} {
     set func [$btn.func get]
@@ -370,10 +374,17 @@ proc ::app::request::selectFunction {w btn} {
 }
 
 proc ::app::request::insertFunction {w btn func} {
-    array unset ::cfg::request /*#class
+    variable input
+    set id [id $w]
+    array unset input $id,/*#class
+    $btn.menu delete 0 end
     $btn.func delete 0 end
     $btn.func insert end $func
-    set ::cfg::request(func) $func
+    $btn.func selection range 0 end
+    set input($id,func) $func
+    foreach n [array names ::cfg::request /$func/*] {
+        set input($id,$n) $::cfg::request($n)
+    }
 
     $w configure -state normal
     $w tag delete "" {*}[lsearch -all -inline [$w tag names] "/*"]
@@ -383,12 +394,14 @@ proc ::app::request::insertFunction {w btn func} {
 }
 
 proc ::app::request::InsertElement {w level align parent name type} {
+    variable input
+    set id [id $w]
     set pad [string repeat " " [expr {$level*4}]]
     set path $parent/$name
     set script {}
 
     lassign [::td::getTypeInfo $name $type] class info
-    set ::cfg::request($path#class) [list $class $info]
+    set input($id,$path#class) [list $class $info]
     set first [$w index insert]
     switch -- $class {
         "type" {
@@ -401,7 +414,7 @@ proc ::app::request::InsertElement {w level align parent name type} {
                 set info "print"
             }
             entry $w.$path -width 20 \
-                    -textvariable ::cfg::request($path) \
+                    -textvariable ::app::request::input($id,$path) \
                     -validate key -vcmd [list string is $info %P]
             $w insert insert [format "%s %-${align}s" $pad "$name:"]
             $w window create insert -window $w.$path
@@ -410,7 +423,7 @@ proc ::app::request::InsertElement {w level align parent name type} {
         "array" {
             set script [list ::app::request::UpdateArray $w [expr {$level+1}] $path $info +1lines]
             spinbox $w.$path#size -width 2 -state readonly -buttoncursor "hand2" -justify right \
-                    -textvariable ::cfg::request($path#size) \
+                    -textvariable ::app::request::input($id,$path#size) \
                     -to 99.0 -format %.0f -wrap false \
                     -command $script                    
             $w insert insert [format "%s %-${align}s" $pad $name]
@@ -421,18 +434,18 @@ proc ::app::request::InsertElement {w level align parent name type} {
             set script [list ::app::request::UpdateUnion $w [expr {$level+1}] $path $name +1lines]
             # spinbox resets textvariable to the first values element, save predefined value
             set path_type ""
-            if {[info exists ::cfg::request($path#type)] && $::cfg::request($path#type) in $info} {
-                set path_type $::cfg::request($path#type)
+            if {[info exists input($id,$path#type)] && $input($id,$path#type) in $info} {
+                set path_type $input($id,$path#type)
             }
             spinbox $w.$path#type -width 20 -state readonly -buttoncursor "hand2" \
-                    -textvariable ::cfg::request($path#type) \
+                    -textvariable ::app::request::input($id,$path#type) \
                     -values [concat {""} $info] -wrap true \
                     -command $script
             $w insert insert [format "%s %-${align}s" $pad $name]
             $w window create insert -window $w.$path#type
             $w insert insert "\($type\):\n"
             $w tag add "info" [$w index insert-3c-[string length $type]c] [$w index insert-3c]
-            set ::cfg::request($path#type) $path_type
+            set input($id,$path#type) $path_type
         }        
         "func" - "struct" {
             if {$class eq "struct"} {
@@ -460,13 +473,15 @@ proc ::app::request::InsertElement {w level align parent name type} {
 }
 
 proc ::app::request::UpdateArray {w level parent type offset} {
+    variable input
+    set id [id $w]
     set state [$w cget -state]
     $w configure -state normal
 
     $w mark set insert [$w index $parent.first$offset]
     set first [$w index insert]
     set tags [$w tag names]
-    for {set i 0} {$i < $::cfg::request($parent#size)} {incr i} {
+    for {set i 0} {$i < min($input($id,$parent#size),99)} {incr i} {
         if {"$parent/$i" ni $tags} {
             InsertElement $w $level [expr {[string length $i]+1}] $parent $i $type
             # NOTE: parent tags expantion
@@ -482,7 +497,7 @@ proc ::app::request::UpdateArray {w level parent type offset} {
         }
     }
     for {} {"$parent/$i" in $tags} {incr i} {
-        array unset ::cfg::request $parent/$i*#class
+        array unset input $id,$parent/$i*#class
         $w delete $parent/$i.first $parent/$i.last
         $w tag delete $parent/$i
     }
@@ -490,21 +505,23 @@ proc ::app::request::UpdateArray {w level parent type offset} {
 }
 
 proc ::app::request::UpdateUnion {w level parent type offset} {
+    variable input
+    set id [id $w]
     set state [$w cget -state]
     $w configure -state normal
 
     $w mark set insert [$w index $parent.first$offset]
     set first [$w index insert]
-    array unset ::cfg::request $parent/*#class
+    array unset input $id,$parent/*#class
     $w delete $first $parent.last
-    if {$::cfg::request($parent#type) ne ""} {
-        lassign [::td::getTypeInfo $type $::cfg::request($parent#type)] class info
+    if {$input($id,$parent#type) ne ""} {
+        lassign [::td::getTypeInfo $type $input($id,$parent#type)] class info
         set a [string length "@type"]
         foreach {n t} [join [lmap i $info {split $i ":"}]] {
             set a [expr {max($a,[string length $n])}]
         }
         incr a
-        InsertElement $w $level $a $parent "@type" $::cfg::request($parent#type)
+        InsertElement $w $level $a $parent "@type" $input($id,$parent#type)
         foreach {n t} [join [lmap i $info {split $i ":"}]] {
             InsertElement $w $level $a $parent $n $t
         }
@@ -519,21 +536,19 @@ proc ::app::request::UpdateUnion {w level parent type offset} {
 }
 
 proc ::app::request::getJson {w} {
+    variable input
+    set id [id $w]
     set json ""
     foreach {cmd txt pos} [$w dump -tag 1.0 end] {
-        if {![info exists ::cfg::request($txt#class)]} {
-            continue
-        }
-        lassign $::cfg::request($txt#class) class info
+        if {![info exists input($id,$txt#class)]} continue
+        lassign $input($id,$txt#class) class info
+        if {$class eq "func"} continue
+        if {$class eq "value" && $input($id,$txt) eq ""} continue
+        if {$class eq "union" && $input($id,$txt#type) eq ""} continue
+        if {$class eq "array" && $input($id,$txt#size) eq "0"} continue
         if {$cmd eq "tagon"} {
-            if {$class eq "func"} {
-                continue
-            }
-            if {$class eq "value" && $::cfg::request($txt) eq ""} {
-                continue
-            }
-            set path [lindex [split $txt "/"] end]
-            set name [lindex [split $path "#"] 0]
+            set tail [lindex [split $txt "/"] end]
+            set name [lindex [split $tail "#"] 0]
             if {![string is integer $name]} {
                 append json "\"$name\":"
             }
@@ -542,13 +557,13 @@ proc ::app::request::getJson {w} {
                     append json "\"$info\","
                 }
                 "unknown" {
-                    append json "\"$::cfg::request($txt)\","
+                    append json "\"$input($id,$txt)\","
                 }
                 "value" {
                     if {$info in {"ascii" "print"}} {
-                        append json "\"$::cfg::request($txt)\","
-                    } elseif {$::cfg::request($txt) ne ""} {
-                        append json $::cfg::request($txt) ","
+                        append json "\"$input($id,$txt)\","
+                    } elseif {$input($id,$txt) ne ""} {
+                        append json $input($id,$txt) ","
                     }
                 }
                 "array" {
@@ -572,6 +587,10 @@ proc ::app::request::getJson {w} {
     return [string trimright $json ","]
 }
 
+proc ::app::request::id {w} {
+    scan $w $::app::widget(request)%d
+}
+
 proc ::app::request::configureInfo {w tag} {
     $w tag configure $tag -underline true ;# -foreground blue
     $w tag bind $tag <Enter> {%W configure -cursor "question_arrow"}
@@ -591,7 +610,6 @@ namespace eval td {
     variable clientId ""
     variable authorizationState ""
     variable connectionState ""
-    variable queries [dict create]
     variable types [dict create]
     variable classes [dict create]
     variable functions [dict create]
@@ -607,8 +625,9 @@ namespace eval td {
         "Bool" "boolean"
     }
 
-    variable logCallback "";
+    variable logCallback ""
     variable listCallback; array set listCallback {options "" users "" chats ""}
+    variable eventCallback; array set eventCallback {}
 
     if {[info commands ::thread::create] ne ""} {
         variable receiveBgTimeout 1.00
@@ -652,12 +671,17 @@ https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     }
     if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread eq ""} {
         set ::td::receiveBgThread [::thread::create]
-        thread::send $::td::receiveBgThread [list set auto_path $::auto_path]
-        thread::send $::td::receiveBgThread [list package require tdjson]
+        ::thread::send $::td::receiveBgThread [list set auto_path $::auto_path]
+        ::thread::send $::td::receiveBgThread [list package require tdjson]
     }
     td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
     return ""
+}
+
+proc ::td::done {} {
+    stopReceiveBg
+    destroyClient
 }
 
 proc ::td::createClient {} {
@@ -666,6 +690,9 @@ proc ::td::createClient {} {
 
 proc ::td::destroyClient {} {
     set ::td::clientId ""
+    set ::td::authorizationState ""
+    set ::td::connectionState ""
+    array unset ::td::eventCallback
 }
 
 proc ::td::execute {type args} {
@@ -680,7 +707,6 @@ proc ::td::send {args} {
         set json [jsonObject "@extra" $extra {*}$args]
         Log "SEND>" $json
         td_send $::td::clientId $json
-        dict set ::td::queries $extra ""
         return $extra
     }
     return ""
@@ -688,24 +714,13 @@ proc ::td::send {args} {
 
 proc ::td::receive {timeout} {
     if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread ne ""} {
-        thread::send -async $::td::receiveBgThread \
+        ::thread::send -async $::td::receiveBgThread \
                 [list td_receive $timeout] ::td::receiveBgResult
         vwait ::td::receiveBgResult
         Parse "RECV<" $::td::receiveBgResult
     } else {
         Parse "RECV<" [td_receive $timeout]
     }
-}
-
-proc ::td::getReceived {extra} {
-    if {[dict exists $::td::queries $extra]} {
-        set event [dict get $::td::queries $extra]
-        if {$event ne ""} {
-            dict unset ::td::queries $extra
-            return $event
-        }
-    }
-    return ""
 }
 
 proc ::td::startReceiveBg {} {
@@ -724,6 +739,10 @@ proc ::td::setLogCallback {callback} {
 
 proc ::td::setListCallback {list callback} {
     set ::td::listCallback($list) $callback
+}
+
+proc ::td::setEventCallback {extra callback} {
+    set ::td::eventCallback($extra) $callback
 }
 
 proc ::td::getTypeInfo {apiname apitype} {
@@ -808,7 +827,7 @@ proc ::td::Parse {info json} {
         return ""
     }
     if {[dict exists $event "@extra"]} {
-        dict set ::td::queries [dict get $event "@extra"] $json
+        InvokeEventCallback [dict get $event "@extra"] $json
     }
     if {[dict exists $event "@type"]} {
         switch -- [dict get $event "@type"] {
@@ -838,7 +857,7 @@ proc ::td::Parse {info json} {
                 if {[dict exists $event "authorization_state" "@type"]} {
                     set ::td::authorizationState [dict get $event "authorization_state" "@type"]
                     if {$::td::authorizationState eq "authorizationStateClosed"} {
-                        ::td::destroyClient
+                        destroyClient
                     }
                 }
             }
@@ -852,9 +871,18 @@ proc ::td::Parse {info json} {
     return $event
 }
 
+proc td::InvokeEventCallback {extra json} {
+    if {[info exists ::td::eventCallback($extra)]} {
+        set callback $::td::eventCallback($extra)
+        unset ::td::eventCallback($extra)
+        uplevel #0 $callback [list $json]
+    }
+}
+
 proc td::InvokeListCallback {list name value} {
     if {$::td::listCallback($list) ne ""} {
-        uplevel #0 $::td::listCallback($list) [list $name $value]
+        set callback $::td::listCallback($list)
+        uplevel #0 $callback [list $name $value]
     }
 }
 
@@ -911,8 +939,7 @@ proc ::td::Log {info text} {
 proc ::td::Fatal {level message} {
     debug "tdlib message: $level $message"
     if {$level == 0} {
-        ::td::stopReceiveBg
-        ::td::destroyClient
+        td::done
         tk_messageBox -title "tdlib fatal error" -icon error -message $message
         exit 1
     }
@@ -925,12 +952,12 @@ namespace eval cfg {
     variable _cfg_cfg_file ""
     variable _app_log_max_lines 1000
     variable _app_log_enabled 1
+    variable lastId 0; proc nextId {} {incr ::cfg::lastid}
     variable request; array set request {}
 }
 
 proc ::cfg::init {} {
     set rootname [file rootname [info script]]
-    set ::cfg::_cfg_var_file [load [lindex $::argv 1] $rootname.var]
     set ::cfg::_cfg_cfg_file [load [lindex $::argv 0] $rootname.cfg]
     if {$::cfg::_debug} {
         if {$::tcl_platform(platform) eq "windows"} {
@@ -947,17 +974,6 @@ proc ::cfg::init {} {
             debug "tkconclient started at port 12345"
         }
     }
-}
-
-proc cfg::done {} {
-    unset {*}[info vars ::cfg::*]
-    variable _debug 0
-    variable _td_api_file ""
-    variable _cfg_var_file ""
-    variable _cfg_cfg_file ""
-    variable _app_log_max_lines 1000
-    variable _app_log_enabled 1
-    variable request; array set request {}
 }
 
 proc ::cfg::load {fname1 fname2} {
@@ -986,37 +1002,6 @@ proc ::cfg::load {fname1 fname2} {
     return $fname
 }
 
-proc ::cfg::save {} {
-    if {$::cfg::_cfg_var_file ne ""} {
-        try {
-            set f [open $::cfg::_cfg_var_file "w"]
-            foreach v [lsort [info vars ::cfg::_*]] {
-                if {[info exists $v]} {
-                    puts $f [list [namespace tail $v] [set $v]]
-                }
-            }
-            foreach v [lsort [array names ::cfg::request /*]] {
-                if {[string match "*password*" $v]} {
-                    continue
-                }
-                if {$::cfg::request($v) eq ""} {
-                    continue
-                }
-                if {![string match "*#*" $v] || \
-                        [string match "*#type" $v] || \
-                        [string match "*#size" $v]} {
-                    puts $f [list $v $::cfg::request($v)]
-                }
-            }
-        } on error {message} {
-            tk_messageBox -title "explore - config" -icon warning \
-                    -message "error saving config file $::cfg::_cfg_var_file:\n$message"
-        } finally {
-            catch {close $f}
-        }
-    }
-}
-
 proc jsonArray {args} {return \[[join $args ,]\]}
 proc jsonString {str} {return [join [list \" [string map {\" \\\" \n \\n \r \\r \t \\t \\ \\\\} $str] \"] ""]}
 proc jsonObject {args} {
@@ -1038,16 +1023,10 @@ proc jsonObject {args} {
     return \{[join $result ,]\}
 }
 
-proc debug {message} {
-    if {$::cfg::_debug} {
-        puts stderr $message
-    }
-}
-
 proc tkerror {args} {
     tk_messageBox -title "explore - tkerror" -icon error -message [join $args \n]
 }
 
 cfg::init
 td::init
-app::init
+after idle app::init
