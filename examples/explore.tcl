@@ -20,6 +20,8 @@ option add *App*Popup*text*font TkFixedFont widgetDefault
 option add *App*Request*text.width 50 widgetDefault
 option add *App*Request*text.height 20 widgetDefault
 option add *App*Request*text.wrap none widgetDefault
+option add *App*Request*text*Entry*relief ridge widgetDefault
+option add *App*Request*text*Spinbox*relief ridge widgetDefault
 option add *Dialog.msg.wrapLength 5i startupFile
 option add *Dialog.dtl.wrapLength 5i startupFile
 
@@ -63,15 +65,15 @@ proc ::app::init {} {
             showOptions "show options" {::app::showList options} \
             showUsers "show users" {::app::showList users} \
             showChats "show chats" {::app::showList chats} \
-            request "request" {::app::request open w "request"} \
+            request "request" {::app::request open - "request"} \
             quit "quit" {::app::quit}
     frame .app.logbtn
     button .app.logbtn.clear -text "clear log" -command {.app.log.list delete 0 end}
     checkbutton .app.logbtn.enabled -text "enabled" -variable ::cfg::_app_log_enabled
     pack .app.logbtn.clear .app.logbtn.enabled -ipadx 8 -side left
-    grid .app.log  - - -sticky news
+    grid .app.log - - -sticky news
     grid .app.auth x .app.logbtn -sticky n
-    grid .app.btn  - - -sticky we
+    grid .app.btn - - -sticky we
     grid columnconfigure .app 1 -weight 1
     grid rowconfigure .app 0 -weight 1
     bind .app.log.list <Double-1> {::app::showLogLine}
@@ -95,8 +97,9 @@ proc ::app::init {} {
                 {%W selection clear 0 end; %W selection set @%x,%y; %W activate @%x,%y; focus %W}
         bind .app.$i.f.list <3> \
                 [list +tk_popup .app.$i.actions %X %Y]
-        ::td::setListCallback $i [list ::app::updateList $i]
         set ::app::widget($i) .app.$i.f
+
+        ::td::setListCallback $i [list ::app::updateList $i]
     }
 
     wm deiconify .app
@@ -126,8 +129,9 @@ proc ::app::createClient {} {
 
 proc ::app::completeAuth {} {
     if {$::td::authorizationState eq "authorizationStateClosed"} {
-        tk_messageBox -parent .app -icon info -message "client is closed, create new client"
-    } elseif {$::td::authorizationState eq "authorizationStateClosed"} {
+        tk_messageBox -parent .app -icon info \
+                -message "client is closed, create new client"
+    } elseif {$::td::authorizationState eq "authorizationStateReady"} {
         if {[tk_messageBox -parent .app -type yesno -title warning -icon warning \
                 -message "client already authorized. logout?"] eq yes} {
             send "logout client" "@type" [jsonString "logOut"]
@@ -143,7 +147,7 @@ proc ::app::completeAuth {} {
             "authorizationStateWaitPassword" "checkAuthenticationPassword"
         }
         if {[info exists map($::td::authorizationState)]} {
-            request open w "auth" "func" $map($::td::authorizationState)
+            request open - "auth" "func" $map($::td::authorizationState)
         }
     }
 }
@@ -155,7 +159,7 @@ proc ::app::showList {list} {
 proc ::app::showLogLine {} {
     set s [$::app::widget(log).list get active]
     set i [string first "\{" $s]
-    popup open w "log event" "close" [string range $s 0 [expr {$i-2}]] \
+    popup open - "log event" "close" [string range $s 0 [expr {$i-2}]] \
             [FormatEventJson [string range $s $i end]]
 }
 
@@ -163,7 +167,7 @@ proc ::app::popup {command w args} {
     switch -- $command {
         open {
             # args: title button message text
-            set wname $w; unset w; upvar $wname w
+            if {$w ne "-"} {set wname $w; unset w; upvar $wname w}
             set w $::app::widget(popup)[::cfg::nextId]
             set close [list ::app::popup close $w]
             CreateToplevel $w Popup dialog "popup" $close
@@ -176,6 +180,7 @@ proc ::app::popup {command w args} {
 
             tk::PlaceWindow $w widget .app
             wm transient $w .app
+            focus $w.btn
 
             tailcall ::app::popup update $w {*}$args
         }
@@ -199,9 +204,6 @@ proc ::app::popup {command w args} {
         close {
             destroy $w
         }
-        default {
-            error "invalid ::app::popup command '$command'"
-        }
     }
 }
 
@@ -209,41 +211,36 @@ proc ::app::request {command w args} {
     switch -- $command {
         open {
             # args: title name1 value1
-            set wname $w; unset w; upvar $wname w
+            if {$w ne "-"} {set wname $w; unset w; upvar $wname w}
             set w $::app::widget(request)[::cfg::nextId]
             set title [lindex $args 0]
-            set send [list ::app::request "send" $w $title]
             set close [list ::app::request "close" $w]
             set select [list ::app::request::selectFunction $w.txt.text $w.btn]
             CreateToplevel $w Request dialog $title $close
             CreateScrolled $w.txt text text
-            frame $w.btn
+            CreateButtons $w.btn \
+                select "select" $select \
+                send "send" [list ::app::request "send" $w $title] \
+                load "load" [list ::app::request::load $w] \
+                save "save" [list ::app::request::save $w] \
+                close "close" $close
             entry $w.btn.func
             menu $w.btn.menu -tearoff 0
-            button $w.btn.select -text "select" -pady 0 -command $select
-            button $w.btn.send -text "send" -pady 0 -command $send
-            button $w.btn.close -text "close" -command $close
-            pack $w.btn.func $w.btn.select $w.btn.send $w.btn.close -side left -fill x -expand yes
+            pack $w.btn.func -before $w.btn.select -side left
             pack $w.txt -fill both -expand yes
             pack $w.btn -fill x
             bind $w.btn.func <Return> $select
             bind $w.btn.func <FocusIn> {%W selection range 0 end}
 
-            tk::PlaceWindow $w widget .app
-            wm transient $w .app
-            focus $w.btn.func
-
             set bg [$w.txt.text cget -background]
             option add *App*Request*text*Entry*background $bg widgetDefault
             option add *App*Request*text*Spinbox*readonlyBackground $bg widgetDefault
 
-            set id [request::id $w]
-            foreach {n v} [lrange $args 1 end] {
-                set ::app::request::input($id,$n) $v
-            }
-            if {[info exists ::app::request::input($id,func)]} {
-                request::insertFunction $w.txt.text $w.btn $::app::request::input($id,func)
-            }
+            tk::PlaceWindow $w widget .app
+            wm transient $w .app
+            focus $w.btn.func
+
+            request::import $w [lrange $args 1 end]
             request::configureInfo $w.txt.text "info"
         }
         send {
@@ -255,9 +252,6 @@ proc ::app::request {command w args} {
             set id [request::id $w]
             array unset ::app::request::input $id,*
             destroy $w
-        }
-        default {
-            error "invalid ::app::request command '$command'"
         }
     }
 }
@@ -304,7 +298,7 @@ proc ::app::invokeListAction {list action} {
     set i [$w index active]
     if {$i ne "" && [regexp {^([^:]+):} [$w get $i] => id]} {
         lassign $action func key
-        request open w "query $list: $id" "func" $func /$func/$key $id \
+        request open - "query $list: $id" "func" $func /$func/$key $id \
                 {*}[join [lmap {n v} [lrange $action 2 end] {list /$func/$n $v}]]
     }
 }
@@ -380,7 +374,6 @@ proc ::app::request::insertFunction {w btn func} {
     $btn.menu delete 0 end
     $btn.func delete 0 end
     $btn.func insert end $func
-    $btn.func selection range 0 end
     set input($id,func) $func
     foreach n [array names ::cfg::request /$func/*] {
         set input($id,$n) $::cfg::request($n)
@@ -462,9 +455,6 @@ proc ::app::request::InsertElement {w level align parent name type} {
                 InsertElement $w [expr {$level+1}] $a $path $n $t
             }
         }
-        default {
-            error "Internal error: invalid class '$class'"
-        }
     }
     $w tag add $path $first insert
     $w tag lower $path
@@ -484,7 +474,7 @@ proc ::app::request::UpdateArray {w level parent type offset} {
     for {set i 0} {$i < min($input($id,$parent#size),99)} {incr i} {
         if {"$parent/$i" ni $tags} {
             InsertElement $w $level [expr {[string length $i]+1}] $parent $i $type
-            # NOTE: parent tags expantion
+            # expand parent tags
             foreach t [$w tag names $first-1char] {
                 if {[string first $t $parent] == 0} {
                     $w tag add $t $first insert
@@ -512,11 +502,12 @@ proc ::app::request::UpdateUnion {w level parent type offset} {
 
     $w mark set insert [$w index $parent.first$offset]
     set first [$w index insert]
-    array unset input $id,$parent/*#class
     $w delete $first $parent.last
+    array unset input $id,$parent/*#class
     if {$input($id,$parent#type) ne ""} {
         lassign [::td::getTypeInfo $type $input($id,$parent#type)] class info
-        set a [string length "@type"]
+#       set a [string length "@type"]
+        set a 0
         foreach {n t} [join [lmap i $info {split $i ":"}]] {
             set a [expr {max($a,[string length $n])}]
         }
@@ -525,7 +516,7 @@ proc ::app::request::UpdateUnion {w level parent type offset} {
         foreach {n t} [join [lmap i $info {split $i ":"}]] {
             InsertElement $w $level $a $parent $n $t
         }
-        # NOTE: parent tags expantion
+        # expand parent tags
         foreach t [$w tag names $first-1char] {
             if {[string first $t $parent] == 0} {
                 $w tag add $t $first insert
@@ -546,45 +537,89 @@ proc ::app::request::getJson {w} {
         if {$class eq "value" && $input($id,$txt) eq ""} continue
         if {$class eq "union" && $input($id,$txt#type) eq ""} continue
         if {$class eq "array" && $input($id,$txt#size) eq "0"} continue
-        if {$cmd eq "tagon"} {
-            set tail [lindex [split $txt "/"] end]
-            set name [lindex [split $tail "#"] 0]
-            if {![string is integer $name]} {
-                append json "\"$name\":"
-            }
-            switch -- $class {
-                "type" {
-                    append json "\"$info\","
+        switch -- $cmd {
+            "tagon" {
+                set tail [lindex [split $txt "/"] end]
+                set name [lindex [split $tail "#"] 0]
+                if {![string is integer $name]} {
+                    append json "\"$name\":"
                 }
-                "unknown" {
-                    append json "\"$input($id,$txt)\","
-                }
-                "value" {
-                    if {$info in {"ascii" "print"}} {
+                switch -- $class {
+                    "type" {
+                        append json "\"$info\","
+                    }
+                    "unknown" {
                         append json "\"$input($id,$txt)\","
-                    } elseif {$input($id,$txt) ne ""} {
-                        append json $input($id,$txt) ","
+                    }
+                    "value" {
+                        if {$info in {"ascii" "print"}} {
+                            append json "\"$input($id,$txt)\","
+                        } elseif {$input($id,$txt) ne ""} {
+                            append json $input($id,$txt) ","
+                        }
+                    }
+                    "array" {
+                        append json "\["
+                    }
+                    "struct" - "union" {
+                        append json "\{"
                     }
                 }
-                "array" {
-                    append json "\["
-                }
-                "struct" - "union" {
-                    append json "\{"
+            }
+            "tagoff" {
+                switch -- $class {
+                    "array" {
+                        set json [string trimright $json ","]\],
+                    }
+                    "struct" - "union" {
+                        set json [string trimright $json ","]\},
+                    }
                 }
             }
-        } elseif {$cmd eq "tagoff"} {
-            switch -- $class {
-                "array" {
-                    set json [string trimright $json ","]\],
-                }
-                "struct" - "union" {
-                    set json [string trimright $json ","]\},
-                }
-            }    
         }
     }
     return [string trimright $json ","]
+}
+
+proc ::app::request::import {w request} {
+    variable input
+    set id [id $w]
+    set func [expr {[dict exists $request "func"] ? [dict get $request "func"] : ""}]
+    foreach {n v} $request {
+        if {$func eq ""} {
+            set func [lindex [split [lindex [split $n /] 1] #] 0]
+        }
+        set input($id,$n) $v
+    }
+    if {$func ne ""} {
+        insertFunction $w.txt.text $w.btn $func
+    }
+}
+
+proc ::app::request::load {w} {
+    set request [::cfg::loadRequest]
+    if {[llength $request]} {
+        import $w $request
+    }
+}
+
+proc ::app::request::save {w} {
+    variable input
+    set id [id $w]
+    if {[info exists input($id,func)]} {
+        set request {}
+        foreach n [lsort [array names input $id,/*]] {
+            if {[string match "*#class" $n] || [string match "*password*" $n]} {
+                continue
+            }
+            if {$input($n) ne ""} {
+                lappend request [regsub {^\d+,} $n ""] $input($n)
+            }
+        }
+        if {[llength $request]} {
+            ::cfg::saveRequest $input($id,func) $request
+        }
+    }
 }
 
 proc ::app::request::id {w} {
@@ -626,8 +661,8 @@ namespace eval td {
     }
 
     variable logCallback ""
-    variable listCallback; array set listCallback {options "" users "" chats ""}
     variable eventCallback; array set eventCallback {}
+    variable listCallback; array set listCallback {options "" users "" chats ""}
 
     if {[info commands ::thread::create] ne ""} {
         variable receiveBgTimeout 1.00
@@ -642,8 +677,7 @@ proc ::td::init {} {
         set ::td::apiFile [OpenApi $::cfg::_td_api_file]
     } else {
         tk_messageBox -title "warning" -icon warning \
-                -message "api file '$::cfg::_td_api_file' is missing, \
-functionality will be limited.\
+                -message "api file '$::cfg::_td_api_file' is missing.
 latest api file is available on github:
 https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
         dict set ::td::functions "setTdlibParameters" {
@@ -676,7 +710,6 @@ https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     }
     td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
-    return ""
 }
 
 proc ::td::done {} {
@@ -764,6 +797,7 @@ proc ::td::getTypeInfo {apiname apitype} {
 }
 
 proc ::td::getDescription {apiname} {
+    set result ""
     if {$::td::apiFile ne "" && [dict exists $::td::descriptions $apiname]} {
         try {
             set result ""
@@ -777,41 +811,41 @@ proc ::td::getDescription {apiname} {
                     break
                 }
             }
-            return [split [string map {" @" "\n@"} $result] "\n"]
+            set result [split [string map {" @" "\n@"} $result] "\n"]
         } on error {message} {
             tk_messageBox -title "explore - api" -icon warning \
                     -message "error reading api file:\n$message"
             catch {close $::td::apiFile}
             set ::td::apiFile ""
-            return ""
         }
     }
+    return $result
 }
 
 proc ::td::formatEvent {dict {indent 4} {level 0}} {
     set result ""
-    set padding [string repeat " " [expr {$indent * $level}]]
+    set pad [string repeat " " [expr {$indent * $level}]]
     dict for {k v} $dict {
-        set s $padding
+        set p $pad
         if {![string match "@*" $k]} {
-            append s " "
+            append p " "
         }
-        set snext $s[string repeat " " $indent]
-        set l [expr {$level+1}]
+        set pnext $p[string repeat " " $indent]
+        set lnext [expr {$level+1}]
         if {[catch {dict get $v @type}]} {
             if {[catch {lmap i $v {dict get $i @type}}]} {
                 if {[string first "\n" $v] < 0} {
-                    append result [format "%s%s: %s\n" $s $k $v]
+                    append result [format "%s%s: %s\n" $p $k $v]
                 } else {
-                    append result [format "%s%s:\n%s %s\n" $s $k $snext \
-                            [string map [list "\n" "\n$snext "] $v]]
+                    append result [format "%s%s:\n%s %s\n" $p $k $pnext \
+                            [string map [list "\n" "\n$pnext "] $v]]
                 }
             } else {
-                append result [format "%s%s:\n%s" $s $k \
-                        [join [lmap i $v {td::formatEvent $i $indent $l}] ""]]
+                append result [format "%s%s:\n%s" $p $k \
+                        [join [lmap i $v {td::formatEvent $i $indent $lnext}] ""]]
             }
         } else {
-            append result [format "%s%s:\n%s" $s $k [td::formatEvent $v $indent $l]]
+            append result [format "%s%s:\n%s" $p $k [td::formatEvent $v $indent $lnext]]
         }
     }
     return $result
@@ -895,9 +929,7 @@ proc ::td::OpenApi {filename} {
         set dict "types"
         set f [open $filename r]
         set p [tell $f]
-        set l 0
         while {[gets $f s] >= 0} {
-            incr l
             set s [string trim $s]
             if {$s eq "---functions---"} {
                 set dict "functions"
@@ -930,14 +962,14 @@ proc ::td::OpenApi {filename} {
 }
 
 proc ::td::Log {info text} {
-    # debug $info:$text
+#   puts stderr $info:$text
     if {$::td::logCallback ne ""} {
         uplevel #0 $::td::logCallback [list [format "%s %s" $info $text]]
     }
 }
 
 proc ::td::Fatal {level message} {
-    debug "tdlib message: $level $message"
+    puts stderr "tdlib message: $level $message"
     if {$level == 0} {
         td::done
         tk_messageBox -title "tdlib fatal error" -icon error -message $message
@@ -948,12 +980,12 @@ proc ::td::Fatal {level message} {
 namespace eval cfg {
     variable _debug 0
     variable _td_api_file ""
-    variable _cfg_var_file ""
     variable _cfg_cfg_file ""
+    variable _app_req_dir ""
     variable _app_log_max_lines 1000
     variable _app_log_enabled 1
-    variable lastId 0; proc nextId {} {incr ::cfg::lastid}
     variable request; array set request {}
+    coroutine nextId apply {{} {yield; while true {yield [incr i]}}}
 }
 
 proc ::cfg::init {} {
@@ -961,17 +993,20 @@ proc ::cfg::init {} {
     set ::cfg::_cfg_cfg_file [load [lindex $::argv 0] $rootname.cfg]
     if {$::cfg::_debug} {
         if {$::tcl_platform(platform) eq "windows"} {
-            catch {console show}
+            catch {
+                console show
+                update idle
+            }
             catch {
                 package require dde
                 dde servername ExploreDebug
-                debug "ddeserver started as ExploreDebug"
+                puts stderr "ddeserver started as ExploreTcl"
             }
         }
         catch {
             package require tkconclient
             tkconclient::start 12345
-            debug "tkconclient started at port 12345"
+            puts stderr "tkconclient started at port 12345"
         }
     }
 }
@@ -1002,6 +1037,54 @@ proc ::cfg::load {fname1 fname2} {
     return $fname
 }
 
+proc ::cfg::loadRequest {} {
+    set request {}
+    set fname [tk_getOpenFile -title "load request" \
+            -filetypes {{request *.req} {all *.*}} \
+            -initialdir $::cfg::_app_req_dir \
+            -defaultextension .req]
+    if {$fname ne ""} {
+        try {
+            set f [open $fname "r"]
+            foreach l [split [read $f] \n] {
+                set l [string trim $l]
+                switch -- [string range $l 0 0] {
+                    "/" {
+                        lappend request [lindex $l 0] [lrange $l 1 end]
+                    }
+                }
+            }
+        } on error {message} {
+            tk_messageBox -title "explore - request" -icon warning \
+                    -message "error loading request file $fname:\n$message"
+        } finally {
+            catch {close $f}
+        }
+    }
+    return $request
+}
+
+proc ::cfg::saveRequest {fname request} {
+    set fname [tk_getSaveFile -title "save request" \
+            -filetypes {{request *.req} {all *.*}} \
+            -initialdir $::cfg::_app_req_dir \
+            -initialfile $fname \
+            -defaultextension .req]
+    if {$fname ne ""} {
+        try {
+            set f [open $fname "w"]
+            foreach {n v} $request {
+                puts $f [list $n $v]
+            }
+        } on error {message} {
+            tk_messageBox -title "explore - request" -icon warning \
+                    -message "error saving request file $fname:\n$message"
+        } finally {
+            catch {close $f}
+        }
+    }
+}
+
 proc jsonArray {args} {return \[[join $args ,]\]}
 proc jsonString {str} {return [join [list \" [string map {\" \\\" \n \\n \r \\r \t \\t \\ \\\\} $str] \"] ""]}
 proc jsonObject {args} {
@@ -1011,10 +1094,7 @@ proc jsonObject {args} {
         foreach {n v} [lrange $args 0 end-1] {
             lappend result [jsonString $n]:$v
         }
-        set a [lindex $args end]
-        if {$a ne ""} {
-            lappend result $a
-        }
+        lappend result [lindex $args end]
     } else {
         foreach {n v} $args {
             lappend result [jsonString $n]:$v
