@@ -1,8 +1,8 @@
 #include <tcl.h>
 #include <td/telegram/td_json_client.h>
 
-#include "tdjson.h"
-#include "tdjsonUuid.h"
+#include "tcltdjson.h"
+#include "tcltdjsonUuid.h"
 
 /*
 TDJSON_EXPORT int td_create_client_id();
@@ -129,7 +129,7 @@ static int TestLogMessageCallback_Cmd(void *clientData, Tcl_Interp *interp, int 
 extern "C" {
 #endif  /* __cplusplus */
 DLLEXPORT int
-Tdjson_Init(
+Tcltdjson_Init(
     Tcl_Interp* interp)     /* Tcl interpreter */
 {
     Tcl_CmdInfo info;
@@ -143,9 +143,9 @@ Tdjson_Init(
     }
 
     if (Tcl_GetCommandInfo(interp, "::tcl::build-info", &info)) {
-        Tcl_CreateObjCommand(interp, "::tdjson::build-info",
+        Tcl_CreateObjCommand(interp, "::tcltdjson::build-info",
             info.objProc, (void *)(
-                PACKAGE_VERSION "+" STRINGIFY(TDJSON_VERSION_UUID)
+                PACKAGE_VERSION "+" STRINGIFY(TCLTDJSON_VERSION_UUID)
 #if defined(__clang__) && defined(__clang_major__)
                 ".clang-" STRINGIFY(__clang_major__)
 #if __clang_minor__ < 10

@@ -1,6 +1,6 @@
 lappend auto_path [file join [file dirname [info script]] .. win]
 
-package require tdjson
+package require tcltdjson
 
 proc json2dict {json} {
     subst -nocommands -novariables [

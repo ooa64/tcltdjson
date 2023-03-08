@@ -1,6 +1,6 @@
 package require Tk
 package require json
-package require tdjson
+package require tcltdjson
 catch {package require Thread}
 
 wm withdraw .

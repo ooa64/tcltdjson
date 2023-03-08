@@ -19,7 +19,7 @@ dnl	to configure the system for the local environment.
 # so that we create the export library with the dll.
 #-----------------------------------------------------------------------
 
-AC_INIT([tdjson],[0.1])
+AC_INIT([tcltdjson],[0.1])
 
 #--------------------------------------------------------------------
 # Call TEA_INIT as the first TEA_ macro to set up initial vars.
@@ -71,7 +71,7 @@ TEA_SETUP_COMPILER
 # and PKG_TCL_SOURCES.
 #-----------------------------------------------------------------------
 
-TEA_ADD_SOURCES([tdjson.c tcltdjson.c])
+TEA_ADD_SOURCES([tcltdjson.h tcltdjson.c])
 TEA_ADD_HEADERS([])
 TEA_ADD_INCLUDES([])
 TEA_ADD_LIBS([])
@@ -171,7 +171,7 @@ TEA_PROG_TCLSH
 # Setup a *Config.sh.in configuration file.
 #--------------------------------------------------------------------
 
-#TEA_EXPORT_CONFIG([tdjson])
+#TEA_EXPORT_CONFIG([tcltdjson])
 #AC_SUBST(TDJSON_VAR)
 
 #-------------------------------------------------------------------
@@ -194,7 +194,7 @@ AC_SUBST([TDLIB_HOME])
 #--------------------------------------------------------------------
 
 AC_CONFIG_FILES([Makefile pkgIndex.tcl])
-#AC_CONFIG_FILES([tdjsonConfig.sh])
+#AC_CONFIG_FILES([tcltdjsonConfig.sh])
 
 #--------------------------------------------------------------------
 # Finally, substitute all of the various values into the files

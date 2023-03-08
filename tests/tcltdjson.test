@@ -3,7 +3,7 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
-package require tdjson
+package require tcltdjson
 
 test tdjson-1.1 {td_create_client_id} {
     list [catch {td_create_client_id x} errMsg] $errMsg

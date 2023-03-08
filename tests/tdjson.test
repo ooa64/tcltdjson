@@ -3,7 +3,7 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
-package require tdjson
+package require tcltdjson
 
 proc callback args {set ::callback $args}
 testConstraint testCallback [llength [info commands td_test_log_message_callback]]

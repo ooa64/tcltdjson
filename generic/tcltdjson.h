@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-extern DLLEXPORT int	Tdjson_Init(Tcl_Interp * interp);
+extern DLLEXPORT int	Tcltdjson_Init(Tcl_Interp * interp);
 
 #ifdef __cplusplus
 }
