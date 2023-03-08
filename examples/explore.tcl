@@ -66,7 +66,7 @@ proc ::app::init {} {
             showUsers "show users" {::app::showList users} \
             showChats "show chats" {::app::showList chats} \
             request "request" {::app::request open - "request"} \
-            quit "quit" {::app::quit}
+            quit "quit" {::quit}
     frame .app.logbtn
     button .app.logbtn.clear -text "clear log" -command {.app.log.list delete 0 end}
     checkbutton .app.logbtn.enabled -text "enabled" -variable ::cfg::_app_log_enabled
@@ -112,16 +112,11 @@ proc ::app::init {} {
     ::td::startReceiveBg
 }
 
-proc ::app::quit {} {
-    ::td::done
-    exit
-}
-
 proc ::app::createClient {} {
     if {$::td::clientId eq ""} {
         ::td::createClient
         send "create client" "@type" [jsonString "getOption"] "name" [jsonString "version"]
-    } elseif {[tk_messageBox -parent .app -type yesno -title warning -icon warning \
+    } elseif {[tk_messageBox -parent .app -type yesno -title "warning" -icon warning \
             -message "client already created. destroy?"] eq "yes"} {
         send "destroy client" "@type" [jsonString "close"]
     }
@@ -129,10 +124,10 @@ proc ::app::createClient {} {
 
 proc ::app::completeAuth {} {
     if {$::td::authorizationState eq "authorizationStateClosed"} {
-        tk_messageBox -parent .app -icon info \
+        tk_messageBox -parent .app -icon info -title "info" \
                 -message "client is closed, create new client"
     } elseif {$::td::authorizationState eq "authorizationStateReady"} {
-        if {[tk_messageBox -parent .app -type yesno -title warning -icon warning \
+        if {[tk_messageBox -parent .app -type yesno -title "warning" -icon warning \
                 -message "client already authorized. logout?"] eq yes} {
             send "logout client" "@type" [jsonString "logOut"]
         }
@@ -345,7 +340,7 @@ proc ::app::CreateButtons {w args} {
 }
 
 proc ::app::FormatEventJson {json} {
-    if {[catch {json::json2dict $json} result]} {
+    if {[catch {jsonParse $json} result]} {
         return $result\n$json
     } else {
         return [td::formatEvent $result]
@@ -444,8 +439,7 @@ proc ::app::request::InsertElement {w level align parent name type} {
             if {$class eq "struct"} {
                 $w insert insert "$pad $name:\n"
             }
-#           set a [string length "@type"]
-            set a 0
+            set a [string length "@type"]
             foreach {n t} [join [lmap i $info {split $i ":"}]] {
                 set a [expr {max($a,[string length $n])}]
             }
@@ -506,8 +500,7 @@ proc ::app::request::UpdateUnion {w level parent type offset} {
     array unset input $id,$parent/*#class
     if {$input($id,$parent#type) ne ""} {
         lassign [::td::getTypeInfo $type $input($id,$parent#type)] class info
-#       set a [string length "@type"]
-        set a 0
+        set a [string length "@type"]
         foreach {n t} [join [lmap i $info {split $i ":"}]] {
             set a [expr {max($a,[string length $n])}]
         }
@@ -637,7 +630,7 @@ proc ::app::request::showInfo {w point} {
     set indices [$w tag prevrange "info" $point+1char]
     set text [$w get {*}$indices]
     if {[regexp {@type:\s*(\w+)$} $text => type] || [regexp {^(\w+)$} $text => type]} {
-        tk_messageBox -title "tdjson api" -message $type -detail [join [td::getDescription $type] \n\n]
+        tk_messageBox -parent $w -title "info" -message $type -detail [join [td::getDescription $type] \n\n]
     }
 }
 
@@ -649,7 +642,8 @@ namespace eval td {
     variable classes [dict create]
     variable functions [dict create]
     variable descriptions [dict create]
-    variable apiFile "td_api.tl"
+    variable logFile ""
+    variable apiFile ""
     variable apiBasic; array set apiBasic {
         "double" "double"
         "string" "print"
@@ -673,13 +667,16 @@ namespace eval td {
 }
 
 proc ::td::init {} {
-    if {[file exists $::cfg::_td_api_file]} {
+    if {$::cfg::_td_log_file ne ""} {
+        set ::td::logFile [OpenLog $::cfg::_td_log_file]
+    }
+    if {$::cfg::_td_api_file ne "" && [file exists $::cfg::_td_api_file]} {
         set ::td::apiFile [OpenApi $::cfg::_td_api_file]
     } else {
-        tk_messageBox -title "warning" -icon warning \
-                -message "api file '$::cfg::_td_api_file' is missing.
-latest api file is available on github:
-https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
+        tkwarning "api file '$::cfg::_td_api_file' is missing.\nlatest api file is available as" \
+                "https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
+    }
+    if {$::td::apiFile eq ""} {
         dict set ::td::functions "setTdlibParameters" {
             api_id:int32
             api_hash:string
@@ -712,9 +709,10 @@ https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
 }
 
-proc ::td::done {} {
+proc ::td::quit {} {
     stopReceiveBg
     destroyClient
+    CloseLog
 }
 
 proc ::td::createClient {} {
@@ -730,7 +728,7 @@ proc ::td::destroyClient {} {
 
 proc ::td::execute {type args} {
     set json [jsonObject "@type" [jsonString $type] {*}$args]
-    Log "EXEC>" $json
+    WriteLog "EXEC>" $json
     Parse "EXEC<" [td_execute $json]
 }
 
@@ -738,7 +736,7 @@ proc ::td::send {args} {
     if {$::td::clientId ne ""} {
         set extra [clock clicks]
         set json [jsonObject "@extra" $extra {*}$args]
-        Log "SEND>" $json
+        WriteLog "SEND>" $json
         td_send $::td::clientId $json
         return $extra
     }
@@ -813,8 +811,7 @@ proc ::td::getDescription {apiname} {
             }
             set result [split [string map {" @" "\n@"} $result] "\n"]
         } on error {message} {
-            tk_messageBox -title "explore - api" -icon warning \
-                    -message "error reading api file:\n$message"
+            tkwarning "error reading api file:" $message
             catch {close $::td::apiFile}
             set ::td::apiFile ""
         }
@@ -853,11 +850,11 @@ proc ::td::formatEvent {dict {indent 4} {level 0}} {
 
 proc ::td::Parse {info json} {
     if {$json eq ""} return
-    Log $info $json
+    WriteLog $info $json
     try {
         set event [json::json2dict $json]
-    } on error message {
-        Log "ERROR" $message
+    } on error {message} {
+        WriteLog "ERROR" $message
         return ""
     }
     if {[dict exists $event "@extra"]} {
@@ -920,14 +917,14 @@ proc td::InvokeListCallback {list name value} {
     }
 }
 
-proc ::td::OpenApi {filename} {
+proc ::td::OpenApi {fname} {
     variable types
     variable classes
     variable functions
     variable descriptions
     try {
         set dict "types"
-        set f [open $filename r]
+        set f [open $fname r]
         set p [tell $f]
         while {[gets $f s] >= 0} {
             set s [string trim $s]
@@ -954,15 +951,35 @@ proc ::td::OpenApi {filename} {
         }
         return $f
     } on error {message} {
-        tk_messageBox -title "explore - api" -icon warning \
-                -message "error loading api file $filename:\n$message"
+        tkwarning "error loading api file $fname:" $message
         catch {close $f}
         return ""
     }
 }
 
-proc ::td::Log {info text} {
-#   puts stderr $info:$text
+proc ::td::OpenLog {fname} {
+    try {
+        set ::td::logFile [open $fname a]
+    } on error {message} {
+        tkwarning "error opening log file $fname:" $message
+    }
+}
+
+proc ::td::CloseLog {} {
+    catch {close $::td::logFile}
+    set ::td::logFile ""
+}
+
+proc ::td::WriteLog {info text} {
+    set stamp [clock format [clock seconds] -format "%Y-%m-%dT%H:%M:%S"]
+    if {$::td::logFile ne ""} {
+        try {
+            puts $::td::logFile [format "%s %s %s" $stamp $info $text]
+        } on error {message} {
+            ::td::CloseLog
+            tkwarning "error writing log file:" $message
+        }
+    }
     if {$::td::logCallback ne ""} {
         uplevel #0 $::td::logCallback [list [format "%s %s" $info $text]]
     }
@@ -971,7 +988,7 @@ proc ::td::Log {info text} {
 proc ::td::Fatal {level message} {
     puts stderr "tdlib message: $level $message"
     if {$level == 0} {
-        td::done
+        ::td::quit
         tk_messageBox -title "tdlib fatal error" -icon error -message $message
         exit 1
     }
@@ -980,6 +997,7 @@ proc ::td::Fatal {level message} {
 namespace eval cfg {
     variable _debug 0
     variable _td_api_file ""
+    variable _td_log_file ""
     variable _cfg_cfg_file ""
     variable _app_req_dir ""
     variable _app_log_max_lines 1000
@@ -988,15 +1006,13 @@ namespace eval cfg {
     coroutine nextId apply {{} {yield; while true {yield [incr i]}}}
 }
 
-proc ::cfg::init {} {
+proc ::cfg::init {args} {
     set rootname [file rootname [info script]]
-    set ::cfg::_cfg_cfg_file [load [lindex $::argv 0] $rootname.cfg]
+    set ::cfg::_cfg_cfg_file [load [lindex $args 0] $rootname.cfg]
     if {$::cfg::_debug} {
         if {$::tcl_platform(platform) eq "windows"} {
-            catch {
-                console show
-                update idle
-            }
+            console show
+            update idle
             catch {
                 package require dde
                 dde servername ExploreDebug
@@ -1019,17 +1035,12 @@ proc ::cfg::load {fname1 fname2} {
             foreach l [split [read $f] \n] {
                 set l [string trim $l]
                 switch -- [string range $l 0 0] {
-                    "_" {
-                        set ::cfg::[lindex $l 0] [lrange $l 1 end]
-                    }
-                    "/" {
-                        set ::cfg::request([lindex $l 0]) [lrange $l 1 end]
-                    }
+                    "_" {set ::cfg::[lindex $l 0] [lindex $l 1]}
+                    "/" {set ::cfg::request([lindex $l 0]) [lindex $l 1]}
                 }
             }
         } on error {message} {
-            tk_messageBox -title "explore - config" -icon warning \
-                    -message "error loading config file $fname:\n$message"
+            tkwarning "error loading config file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1048,15 +1059,12 @@ proc ::cfg::loadRequest {} {
             set f [open $fname "r"]
             foreach l [split [read $f] \n] {
                 set l [string trim $l]
-                switch -- [string range $l 0 0] {
-                    "/" {
-                        lappend request [lindex $l 0] [lrange $l 1 end]
-                    }
+                if {[string range $l 0 0] eq "/"} {
+                    lappend request [lindex $l 0] [lindex $l 1]
                 }
             }
         } on error {message} {
-            tk_messageBox -title "explore - request" -icon warning \
-                    -message "error loading request file $fname:\n$message"
+            tkwarning "error loading request file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1077,14 +1085,14 @@ proc ::cfg::saveRequest {fname request} {
                 puts $f [list $n $v]
             }
         } on error {message} {
-            tk_messageBox -title "explore - request" -icon warning \
-                    -message "error saving request file $fname:\n$message"
+            tkwarning "error saving request file $fname:" $message
         } finally {
             catch {close $f}
         }
     }
 }
 
+proc jsonParse {json} {return [json::json2dict $json]}
 proc jsonArray {args} {return \[[join $args ,]\]}
 proc jsonString {str} {return [join [list \" [string map {\" \\\" \n \\n \r \\r \t \\t \\ \\\\} $str] \"] ""]}
 proc jsonObject {args} {
@@ -1103,10 +1111,18 @@ proc jsonObject {args} {
     return \{[join $result ,]\}
 }
 
-proc tkerror {args} {
-    tk_messageBox -title "explore - tkerror" -icon error -message [join $args \n]
+proc tkwarning {args} {tk_messageBox -icon warning -title "warning" -message [join $args \n]}
+proc tkerror {args} {tk_messageBox -icon error -title "error" -message [join $args \n]}
+
+proc init {args} {
+    cfg::init {*}$args
+    td::init
+    app::init
 }
 
-cfg::init
-td::init
-after idle app::init
+proc quit {} {
+    ::td::quit
+    exit
+}
+
+init {*}$argv
