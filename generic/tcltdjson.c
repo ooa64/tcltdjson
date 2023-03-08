@@ -128,7 +128,7 @@ static int TestLogMessageCallback_Cmd(void *clientData, Tcl_Interp *interp, int 
 #ifdef __cplusplus
 extern "C" {
 #endif  /* __cplusplus */
-DLLEXPORT int
+int
 Tcltdjson_Init(
     Tcl_Interp* interp)     /* Tcl interpreter */
 {

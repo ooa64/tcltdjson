@@ -71,7 +71,7 @@ TEA_SETUP_COMPILER
 # and PKG_TCL_SOURCES.
 #-----------------------------------------------------------------------
 
-TEA_ADD_SOURCES([tcltdjson.h tcltdjson.c])
+TEA_ADD_SOURCES([tcltdjson.c])
 TEA_ADD_HEADERS([])
 TEA_ADD_INCLUDES([])
 TEA_ADD_LIBS([])
@@ -195,7 +195,7 @@ AC_SUBST([TDLIB_HOME])
 
 AC_CONFIG_FILES([Makefile pkgIndex.tcl])
 #AC_CONFIG_FILES([tcltdjsonConfig.sh])
-
+OA
 #--------------------------------------------------------------------
 # Finally, substitute all of the various values into the files
 # specified with AC_CONFIG_FILES.
