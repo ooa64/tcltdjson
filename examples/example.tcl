@@ -89,7 +89,7 @@ while {true} {
             "authorizationStateWaitEmailCode" {
                 # wait for email authorization code
                 set code [input "Please enter the email authentication code you received:  "]
-                td_send $client_id [format {{"@type": "emailAddressAuthenticationCode", "code" : "%s"}} $code]
+                td_send $client_id [format {{"@type": "checkEmailAddressVerificationCode", "code" : "%s"}} $code]
             }
 
             "authorizationStateWaitCode" {
