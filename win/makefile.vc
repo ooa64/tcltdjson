@@ -7,6 +7,12 @@
 #   nmake /f makefile.vc INSTALLDIR=c:\path\to\tcl test
 #   nmake /f makefile.vc INSTALLDIR=c:\path\to\tcl install
 #
+# Environment variables
+#   TDROOT = "C:\Pd\Lib"               telegram API install
+#   TDSTATIC = 1|0                     link with telegram or use tdjson.dll
+#   SSLLIB = "C:\OpenSSL-Win64\lib\VC" for TDSTATIC = 1
+#   ZLIB = "C:\ZLib"                   for TDSTATIC = 1
+#
 # For other build options (debug, static etc.),
 # See TIP 477 (https://core.tcl-lang.org/tips/doc/main/tip/477.md) for
 # detailed documentation.
@@ -19,9 +25,6 @@
 # The name of the package
 PROJECT = tcltdjson
 
-# Telegram API install
-# TDROOT = "C:\Pd\Lib"
-
 !include "rules-ext.vc"
 
 # Define the object files and resource file that make up the extension.
@@ -33,7 +36,31 @@ PRJ_OBJS = $(TMP_DIR)\tcltdjson.obj
 # Define any additional compiler flags that might be required for the project
 PRJ_DEFINES = -D_CRT_SECURE_NO_DEPRECATE
 PRJ_DEFINES = $(PRJ_DEFINES) -I$(TMP_DIR) -I$(TDROOT)\include
+
+!ifndef TDSTATIC
+TDSTATIC=0
+!endif
+
+!if $(TDSTATIC)
+PRJ_DEFINES = $(PRJ_DEFINES) -DTDJSON_STATIC_DEFINE
+PRJ_LIBS = \
+	$(TDROOT)\lib\tdjson_static.lib \
+	$(TDROOT)\lib\tdjson_private.lib \
+	$(TDROOT)\lib\tdclient.lib \
+	$(TDROOT)\lib\tdcore.lib \
+	$(TDROOT)\lib\tdnet.lib \
+	$(TDROOT)\lib\tdactor.lib \
+	$(TDROOT)\lib\tddb.lib \
+	$(TDROOT)\lib\tdsqlite.lib \
+	$(TDROOT)\lib\tdapi.lib \
+	$(TDROOT)\lib\tdutils.lib \
+	$(SSLLIB)\libssl64MD.lib \
+	$(SSLLIB)\libcrypto64MD.lib \
+        $(ZLIB)\zlib.lib \
+        ws2_32.lib Crypt32.lib Normaliz.lib psapi.lib
+!else
 PRJ_LIBS = $(TDROOT)\lib\tdjson.lib
+!endif
 
 # Define the standard targets
 !include "$(_RULESDIR)\targets.vc"
