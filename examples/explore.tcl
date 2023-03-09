@@ -5,14 +5,11 @@ catch {package require Thread}
 
 wm withdraw .
 
-foreach i {options users chats} {
-    option add *app*$i*list*width 50 widgetDefault
-    option add *app*$i*list*height 30 widgetDefault
-    unset i
-}
 option add *App*log*list*width 100 widgetDefault
 option add *App*log*list*height 30 widgetDefault
 option add *App*auth*Entry*width 40 widgetDefault
+option add *App*Objects*list*width 50 widgetDefault
+option add *App*Objects*list*height 30 widgetDefault
 option add *App*Popup*text*width 50 widgetDefault
 option add *App*Popup*text*height 20 widgetDefault
 option add *App*Popup*text*wrap none widgetDefault
@@ -62,10 +59,10 @@ proc ::app::init {} {
     CreateButtons .app.btn \
             createClient "create client" {::app::createClient} \
             authAction "complete auth" {::app::completeAuth} \
-            showOptions "show options" {::app::showList options} \
-            showUsers "show users" {::app::showList users} \
-            showChats "show chats" {::app::showList chats} \
-            request "request" {::app::request open - "request"} \
+            showOptions "show options" {::app::showObjects options} \
+            showUsers "show users" {::app::showObjects users} \
+            showChats "show chats" {::app::showObjects chats} \
+            request "make request" {::app::request open - "request"} \
             quit "quit" {::quit}
     frame .app.logbtn
     button .app.logbtn.clear -text "clear log" -command {.app.log.list delete 0 end}
@@ -83,15 +80,15 @@ proc ::app::init {} {
     set ::app::widget(btn) .app.btn
 
     foreach i {options users chats} {
-        CreateToplevel .app.$i List utility $i [list wm withdraw .app.$i]
+        CreateToplevel .app.$i Objects utility $i [list wm withdraw .app.$i]
         CreateScrolled .app.$i.f listbox list
-        CreateButtons .app.$i.btn hide "close" [list wm withdraw .app.$i]
+        CreateButtons .app.$i.btn hide "hide" [list wm withdraw .app.$i]
         pack .app.$i.f -fill both -expand true
         pack .app.$i.btn -fill x
         menu .app.$i.actions -tearoff 0
         foreach action $::app::actions($i) {
             .app.$i.actions add command -label [lindex $action 0] \
-                    -command [list ::app::invokeListAction $i $action]
+                    -command [list ::app::openObjectsAction $i $action]
         }
         bind .app.$i.f.list <3> \
                 {%W selection clear 0 end; %W selection set @%x,%y; %W activate @%x,%y; focus %W}
@@ -99,12 +96,17 @@ proc ::app::init {} {
                 [list +tk_popup .app.$i.actions %X %Y]
         set ::app::widget($i) .app.$i.f
 
-        ::td::setListCallback $i [list ::app::updateList $i]
+        ::td::setObjectsCallback $i {::app::updateObjects}
     }
+    .app.chats.actions add separator
+    .app.chats.actions add command -label "show new messages" -command {::app::openMessages}
+    bind .app.chats.f.list <Double-1> {::app::openMessages}
+    bind .app.chats.f.list <Return> {::app::openMessages}
 
     wm deiconify .app
     raise .app
 
+    set ::app::widget(messages) .app.messages
     set ::app::widget(request) .app.request
     set ::app::widget(popup) .app.popup
 
@@ -147,8 +149,8 @@ proc ::app::completeAuth {} {
     }
 }
 
-proc ::app::showList {list} {
-    tk::PlaceWindow [winfo toplevel $::app::widget($list)] widget .app
+proc ::app::showObjects {object} {
+    ::tk::PlaceWindow [winfo toplevel $::app::widget($object)] widget .app
 }
 
 proc ::app::showLogLine {} {
@@ -173,8 +175,7 @@ proc ::app::popup {command w args} {
             pack $w.txt -fill both -expand 1
             pack $w.btn -fill x
 
-            tk::PlaceWindow $w widget .app
-            wm transient $w .app
+            ::tk::PlaceWindow $w widget .app
             focus $w.btn
 
             tailcall ::app::popup update $w {*}$args
@@ -231,8 +232,7 @@ proc ::app::request {command w args} {
             option add *App*Request*text*Entry*background $bg widgetDefault
             option add *App*Request*text*Spinbox*readonlyBackground $bg widgetDefault
 
-            tk::PlaceWindow $w widget .app
-            wm transient $w .app
+            ::tk::PlaceWindow $w widget .app
             focus $w.btn.func
 
             request::import $w [lrange $args 1 end]
@@ -254,7 +254,7 @@ proc ::app::request {command w args} {
 proc ::app::send {title args} {
     popup open w $title "close" "sending..." [FormatEventJson [jsonObject {*}$args]]
     ::td::setEventCallback [td::send {*}$args] [list apply {
-        {w title response} {
+        {w title extra response} {
             if {[popup active $w]} {
                 popup update $w $title "ok" "response" [FormatEventJson $response]
             }
@@ -276,9 +276,9 @@ proc ::app::updateLog {message} {
     }
 }
 
-proc ::app::updateList {list name value} {
+proc ::app::updateObjects {objects name value} {
     set s "$name: $value"
-    set w $::app::widget($list).list
+    set w $::app::widget($objects).list
     set i [lsearch -glob [$w get 0 end] "$name: *"]
     if {$i >= 0} {
         $w delete $i
@@ -288,14 +288,44 @@ proc ::app::updateList {list name value} {
     }
 }
 
-proc ::app::invokeListAction {list action} {
-    set w $::app::widget($list).list
-    set i [$w index active]
-    if {$i ne "" && [regexp {^([^:]+):} [$w get $i] => id]} {
+proc ::app::updateMessages {id name value} {
+    set s [string range "$name: $value" 0 49]
+    set w $::app::widget(messages)$id.f.list
+    $w insert end $s
+}
+
+proc ::app::openObjectsAction {objects action} {
+    set w $::app::widget($objects).list
+    if {[regexp {^([^:]+):} [$w get active] => id]} {
         lassign $action func key
-        request open - "query $list: $id" "func" $func /$func/$key $id \
+        request open - "query $objects: $id" "func" $func /$func/$key $id \
                 {*}[join [lmap {n v} [lrange $action 2 end] {list /$func/$n $v}]]
     }
+}
+
+proc ::app::openMessages {} {
+    set w $::app::widget(chats).list
+    if {[regexp {^([^:]+):\s*(.*)$} [$w get active] => id name]} {
+        set w $::app::widget(messages)$id
+        if {[winfo exists $w]} {
+            raise $w
+        } else {
+            set title [string trim [regsub -all {[^\w\s]} $name ""]]
+            CreateToplevel $w Objects utility "messages: $id $title" [list wm withdraw $w]
+            CreateScrolled $w.f listbox list
+            CreateButtons $w.btn close "close" [list ::app::closeMessages $id]
+            pack $w.f -fill both -expand true
+            pack $w.btn -fill x
+            ::tk::PlaceWindow [winfo toplevel $w] widget .app
+            ::td::setMessagesCallback $id {::app::updateMessages}
+        }
+    }
+}
+
+proc ::app::closeMessages {id} {
+    set w $::app::widget(messages)$id
+    ::td::setMessagesCallback $id {}
+    catch {destroy $w}
 }
 
 proc ::app::CreateToplevel {w class type title delete} {
@@ -303,7 +333,7 @@ proc ::app::CreateToplevel {w class type title delete} {
     wm withdraw $w
     wm title $w $title
     wm protocol $w WM_DELETE_WINDOW $delete
-    if {$::tcl_platform(platform) eq "unix"} {
+    if {[tk windowingsystem] eq "x11"} {
         wm attributes $w -type $type
     }
 }
@@ -656,7 +686,8 @@ namespace eval td {
 
     variable logCallback ""
     variable eventCallback; array set eventCallback {}
-    variable listCallback; array set listCallback {options "" users "" chats ""}
+    variable objectsCallback; array set objectsCallback {}
+    variable messagesCallback; array set messagesCallback {}
 
     if {[info commands ::thread::create] ne ""} {
         variable receiveBgTimeout 1.00
@@ -768,12 +799,24 @@ proc ::td::setLogCallback {callback} {
     set ::td::logCallback $callback
 }
 
-proc ::td::setListCallback {list callback} {
-    set ::td::listCallback($list) $callback
-}
-
 proc ::td::setEventCallback {extra callback} {
     set ::td::eventCallback($extra) $callback
+}
+
+proc ::td::setObjectsCallback {objects callback} {
+    if {$callback ne ""} {
+        set ::td::objectsCallback($objects) $callback
+    } else {
+        unset ::td::objectsCallback($objects)
+    }
+}
+
+proc ::td::setMessagesCallback {id callback} {
+    if {$callback ne ""} {
+        set ::td::messagesCallback($id) $callback
+    } else {
+        unset ::td::messagesCallback($id)
+    }
 }
 
 proc ::td::getTypeInfo {apiname apitype} {
@@ -864,7 +907,7 @@ proc ::td::Parse {info json} {
         switch -- [dict get $event "@type"] {
             "updateOption" {
                 if {[dict exists $event "name"] && [dict exists $event "value" "value"]} {
-                    InvokeListCallback options \
+                    InvokeObjectsCallback options \
                             [dict get $event "name"] [dict get $event "value" "value"]
                 }
             }
@@ -872,7 +915,7 @@ proc ::td::Parse {info json} {
                 if {[dict exists $event "user" "id"] && \
                         [dict exists $event "user" "first_name"] && \
                         [dict exists $event "user" "last_name"]} {
-                    InvokeListCallback users \
+                    InvokeObjectsCallback users \
                             [dict get $event "user" "id"] [format "%s %s" \
                                     [dict get $event "user" "first_name"] \
                                     [dict get $event "user" "last_name"]]
@@ -880,8 +923,14 @@ proc ::td::Parse {info json} {
             }
             "updateNewChat" {
                 if {[dict exists $event "chat" "id"] && [dict exists $event "chat" "title"]} {
-                    InvokeListCallback chats \
+                    InvokeObjectsCallback chats \
                             [dict get $event "chat" "id"] [dict get $event "chat" "title"]
+                }
+            }
+            "updateNewMessage" {
+                if {[dict exists $event "message" "chat_id"] && [dict exists $event "message" "id"]} {
+                    InvokeMessagesCallback [dict get $event "message" "chat_id"] \
+                            [dict get $event "message" "id"] [FormatMessageTitle $event]
                 }
             }
             "updateAuthorizationState" {
@@ -902,19 +951,39 @@ proc ::td::Parse {info json} {
     return $event
 }
 
-proc td::InvokeEventCallback {extra json} {
+proc ::td::InvokeEventCallback {extra json} {
     if {[info exists ::td::eventCallback($extra)]} {
         set callback $::td::eventCallback($extra)
         unset ::td::eventCallback($extra)
-        uplevel #0 $callback [list $json]
+        uplevel #0 $callback [list $extra $json]
     }
 }
 
-proc td::InvokeListCallback {list name value} {
-    if {$::td::listCallback($list) ne ""} {
-        set callback $::td::listCallback($list)
-        uplevel #0 $callback [list $name $value]
+proc ::td::InvokeObjectsCallback {objects name value} {
+    if {[info exists ::td::objectsCallback($objects)]} {
+        uplevel #0 $::td::objectsCallback($objects) [list $objects $name $value]
     }
+}
+
+proc ::td::InvokeMessagesCallback {id name value} {
+    if {[info exists ::td::messagesCallback($id)]} {
+        uplevel #0 $::td::messagesCallback($id) [list $id $name $value]
+    }
+}
+
+proc ::td::FormatMessageTitle {event} {
+    set result {}
+    if {[dict exists $event "message" "content" "@type"]} {
+        lappend result [dict get $event "message" "content" "@type"]
+        if {[dict exists $event "message" "content" "caption" "text"]} {
+            lappend result [dict get $event "message" "content" "caption" "text"]
+        } elseif {[dict exists $event "message" "content" "text" "text"]} {
+            lappend result [dict get $event "message" "content" "text" "text"]
+        }
+    } else {
+        lappend result "UNKNOWN" $event
+    }
+    join $result " "
 }
 
 proc ::td::OpenApi {fname} {
@@ -1012,7 +1081,7 @@ proc ::cfg::init {args} {
     if {$::cfg::_debug} {
         if {$::tcl_platform(platform) eq "windows"} {
             console show
-            update idle
+            update idletasks
             catch {
                 package require dde
                 dde servername ExploreDebug
@@ -1113,6 +1182,7 @@ proc jsonObject {args} {
 
 proc tkwarning {args} {tk_messageBox -icon warning -title "warning" -message [join $args \n]}
 proc tkerror {args} {tk_messageBox -icon error -title "error" -message [join $args \n]}
+proc debug {args} {if {$::cfg::_debug} {puts stderr $args}}
 
 proc init {args} {
     cfg::init {*}$args
