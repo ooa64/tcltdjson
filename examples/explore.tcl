@@ -703,7 +703,7 @@ proc ::td::init {} {
     if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread eq ""} {
         set ::td::receiveBgThread [::thread::create]
         ::thread::send $::td::receiveBgThread [list set auto_path $::auto_path]
-        ::thread::send $::td::receiveBgThread [list package require tdjson]
+        ::thread::send $::td::receiveBgThread [list package require tcltdjson]
     }
     td_set_log_message_callback 0 ::td::Fatal
     td_execute [jsonObject "@type" [jsonString "setLogVerbosityLevel"] "new_verbosity_level" 1]
