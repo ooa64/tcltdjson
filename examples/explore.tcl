@@ -35,38 +35,38 @@ namespace eval app {
         users {
             {getUser user_id}
             {getUserFullInfo user_id}
-            {getUserProfilePhotos user_id offset 0 limit 99}
             {getUserSupportInfo user_id}
         }
         chats {
             {getChat chat_id}
+            {getMessages chat_id}
             {getChatHistory chat_id}
             {getChatPinnedMessage chat_id}
             {getChatSponsoredMessages chat_id}
-            {getChatStatistics chat_id is_dark 0}
+            {getChatMessageCount chat_id}
         }
     }
     lappend actions(chats) [list getChatMessageByDate chat_id date [clock seconds]]
 }    
 
 proc ::app::init {} {
-    CreateToplevel .app App normal "explore tdjson" {::app::quit}
+    CreateToplevel .app App normal "Explore TDJSON" {::app::quit}
     CreateScrolled .app.log listbox list
     CreateState .app.auth \
-            "client id:" ::td::clientId \
-            "authorization state:" ::td::authorizationState \
-            "connection state:" ::td::connectionState
+            "Client Id:" ::td::clientId \
+            "Authorization State:" ::td::authorizationState \
+            "Connection State:" ::td::connectionState
     CreateButtons .app.btn \
-            createClient "create client" {::app::createClient} \
-            authAction "complete auth" {::app::completeAuth} \
-            showOptions "show options" {::app::showObjects options} \
-            showUsers "show users" {::app::showObjects users} \
-            showChats "show chats" {::app::showObjects chats} \
-            request "make request" {::app::request open - "request"} \
-            quit "quit" {::quit}
+            createClient "Create Client" {::app::createClient} \
+            authAction "Complete Auth" {::app::completeAuth} \
+            showOptions "Show Options" {::app::showObjects options} \
+            showUsers "Show Users" {::app::showObjects users} \
+            showChats "Show Chats" {::app::showObjects chats} \
+            request "Request" {::app::request open - "Request"} \
+            quit "Quit" {::quit}
     frame .app.logbtn
-    button .app.logbtn.clear -text "clear log" -command {.app.log.list delete 0 end}
-    checkbutton .app.logbtn.enabled -text "enabled" -variable ::cfg::_app_log_enabled
+    button .app.logbtn.clear -text "Clear Log" -command {.app.log.list delete 0 end}
+    checkbutton .app.logbtn.enabled -text "Enabled" -variable ::cfg::_app_log_enabled
     pack .app.logbtn.clear .app.logbtn.enabled -ipadx 8 -side left
     grid .app.log - - -sticky news
     grid .app.auth x .app.logbtn -sticky n
@@ -80,9 +80,9 @@ proc ::app::init {} {
     set ::app::widget(btn) .app.btn
 
     foreach i {options users chats} {
-        CreateToplevel .app.$i Objects utility $i [list wm withdraw .app.$i]
+        CreateToplevel .app.$i Objects utility [string totitle $i] [list wm withdraw .app.$i]
         CreateScrolled .app.$i.f listbox list
-        CreateButtons .app.$i.btn hide "hide" [list wm withdraw .app.$i]
+        CreateButtons .app.$i.btn hide "Hide" [list wm withdraw .app.$i]
         pack .app.$i.f -fill both -expand true
         pack .app.$i.btn -fill x
         menu .app.$i.actions -tearoff 0
@@ -99,7 +99,7 @@ proc ::app::init {} {
         ::td::setObjectsCallback $i {::app::updateObjects}
     }
     .app.chats.actions add separator
-    .app.chats.actions add command -label "show new messages" -command {::app::openMessages}
+    .app.chats.actions add command -label "New Messages" -command {::app::openMessages}
     bind .app.chats.f.list <Double-1> {::app::openMessages}
     bind .app.chats.f.list <Return> {::app::openMessages}
 
@@ -117,21 +117,21 @@ proc ::app::init {} {
 proc ::app::createClient {} {
     if {$::td::clientId eq ""} {
         ::td::createClient
-        send "create client" "@type" [jsonString "getOption"] "name" [jsonString "version"]
+        send "Create Client" "@type" [jsonString "getOption"] "name" [jsonString "version"]
     } elseif {[tk_messageBox -parent .app -type yesno -title "warning" -icon warning \
-            -message "client already created. destroy?"] eq "yes"} {
-        send "destroy client" "@type" [jsonString "close"]
+            -message "Client already created. Destroy?"] eq "yes"} {
+        send "Destroy Client" "@type" [jsonString "close"]
     }
 }
 
 proc ::app::completeAuth {} {
     if {$::td::authorizationState eq "authorizationStateClosed"} {
         tk_messageBox -parent .app -icon info -title "info" \
-                -message "client is closed, create new client"
+                -message "Client is closed, create new client"
     } elseif {$::td::authorizationState eq "authorizationStateReady"} {
         if {[tk_messageBox -parent .app -type yesno -title "warning" -icon warning \
-                -message "client already authorized. logout?"] eq yes} {
-            send "logout client" "@type" [jsonString "logOut"]
+                -message "Client already authorized, log out?"] eq yes} {
+            send "Logout Client" "@type" [jsonString "logOut"]
         }
     } else {
         array set map {
@@ -144,7 +144,7 @@ proc ::app::completeAuth {} {
             "authorizationStateWaitPassword" "checkAuthenticationPassword"
         }
         if {[info exists map($::td::authorizationState)]} {
-            request open - "auth" "func" $map($::td::authorizationState)
+            request open - "Complete Auth" "func" $map($::td::authorizationState)
         }
     }
 }
@@ -156,7 +156,7 @@ proc ::app::showObjects {object} {
 proc ::app::showLogLine {} {
     set s [$::app::widget(log).list get active]
     set i [string first "\{" $s]
-    popup open - "log event" "close" [string range $s 0 [expr {$i-2}]] \
+    popup open - "Log Event" "Close" [string range $s 0 [expr {$i-2}]] \
             [FormatEventJson [string range $s $i end]]
 }
 
@@ -167,7 +167,7 @@ proc ::app::popup {command w args} {
             if {$w ne "-"} {set wname $w; unset w; upvar $wname w}
             set w $::app::widget(popup)[::cfg::nextId]
             set close [list ::app::popup close $w]
-            CreateToplevel $w Popup dialog "popup" $close
+            CreateToplevel $w Popup dialog "Popup" $close
             CreateScrolled $w.txt text text
             label $w.msg
             button $w.btn -command $close
@@ -215,11 +215,11 @@ proc ::app::request {command w args} {
             CreateToplevel $w Request dialog $title $close
             CreateScrolled $w.txt text text
             CreateButtons $w.btn \
-                select "select" $select \
-                send "send" [list ::app::request "send" $w $title] \
-                load "load" [list ::app::request::load $w] \
-                save "save" [list ::app::request::save $w] \
-                close "close" $close
+                select "Select" $select \
+                send "Send" [list ::app::request "send" $w $title] \
+                load "Load" [list ::app::request::load $w] \
+                save "Save" [list ::app::request::save $w] \
+                close "Close" $close
             entry $w.btn.func
             menu $w.btn.menu -tearoff 0
             pack $w.btn.func -before $w.btn.select -side left
@@ -252,11 +252,11 @@ proc ::app::request {command w args} {
 }
 
 proc ::app::send {title args} {
-    popup open w $title "close" "sending..." [FormatEventJson [jsonObject {*}$args]]
+    popup open w $title "Close" "Sending..." [FormatEventJson [jsonObject {*}$args]]
     ::td::setEventCallback [td::send {*}$args] [list apply {
         {w title extra response} {
             if {[popup active $w]} {
-                popup update $w $title "ok" "response" [FormatEventJson $response]
+                popup update $w $title "Ok" "Response" [FormatEventJson $response]
             }
         } ::app
     } $w $title]
@@ -298,7 +298,7 @@ proc ::app::openObjectsAction {objects action} {
     set w $::app::widget($objects).list
     if {[regexp {^([^:]+):} [$w get active] => id]} {
         lassign $action func key
-        request open - "query $objects: $id" "func" $func /$func/$key $id \
+        request open - "Query [string totitle $objects]: $id" "func" $func /$func/$key $id \
                 {*}[join [lmap {n v} [lrange $action 2 end] {list /$func/$n $v}]]
     }
 }
@@ -311,9 +311,9 @@ proc ::app::openMessages {} {
             raise $w
         } else {
             set title [string trim [regsub -all {[^\w\s]} $name ""]]
-            CreateToplevel $w Objects utility "messages: $id $title" [list wm withdraw $w]
+            CreateToplevel $w Objects utility "Messages: $id $title" [list wm withdraw $w]
             CreateScrolled $w.f listbox list
-            CreateButtons $w.btn close "close" [list ::app::closeMessages $id]
+            CreateButtons $w.btn close "Close" [list ::app::closeMessages $id]
             pack $w.f -fill both -expand true
             pack $w.btn -fill x
             ::tk::PlaceWindow [winfo toplevel $w] widget .app
@@ -704,7 +704,7 @@ proc ::td::init {} {
     if {$::cfg::_td_api_file ne "" && [file exists $::cfg::_td_api_file]} {
         set ::td::apiFile [OpenApi $::cfg::_td_api_file]
     } else {
-        tkwarning "api file '$::cfg::_td_api_file' is missing.\nlatest api file is available as" \
+        tkwarning "The API file '$::cfg::_td_api_file' is missing.\nThe latest API file is available at" \
                 "https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     }
     if {$::td::apiFile eq ""} {
@@ -854,7 +854,7 @@ proc ::td::getDescription {apiname} {
             }
             set result [split [string map {" @" "\n@"} $result] "\n"]
         } on error {message} {
-            tkwarning "error reading api file:" $message
+            tkwarning "Error reading api file:" $message
             catch {close $::td::apiFile}
             set ::td::apiFile ""
         }
@@ -1020,7 +1020,7 @@ proc ::td::OpenApi {fname} {
         }
         return $f
     } on error {message} {
-        tkwarning "error loading api file $fname:" $message
+        tkwarning "Error loading API file $fname:" $message
         catch {close $f}
         return ""
     }
@@ -1030,7 +1030,7 @@ proc ::td::OpenLog {fname} {
     try {
         set ::td::logFile [open $fname a]
     } on error {message} {
-        tkwarning "error opening log file $fname:" $message
+        tkwarning "Error opening log file $fname:" $message
     }
 }
 
@@ -1046,7 +1046,7 @@ proc ::td::WriteLog {info text} {
             puts $::td::logFile [format "%s %s %s" $stamp $info $text]
         } on error {message} {
             ::td::CloseLog
-            tkwarning "error writing log file:" $message
+            tkwarning "Error writing log file:" $message
         }
     }
     if {$::td::logCallback ne ""} {
@@ -1058,7 +1058,7 @@ proc ::td::Fatal {level message} {
     puts stderr "tdlib message: $level $message"
     if {$level == 0} {
         ::td::quit
-        tk_messageBox -title "tdlib fatal error" -icon error -message $message
+        tk_messageBox -title "TDLIB fatal error" -icon error -message $message
         exit 1
     }
 }
@@ -1109,7 +1109,7 @@ proc ::cfg::load {fname1 fname2} {
                 }
             }
         } on error {message} {
-            tkwarning "error loading config file $fname:" $message
+            tkwarning "Error loading config file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1119,7 +1119,7 @@ proc ::cfg::load {fname1 fname2} {
 
 proc ::cfg::loadRequest {} {
     set request {}
-    set fname [tk_getOpenFile -title "load request" \
+    set fname [tk_getOpenFile -title "Load Request" \
             -filetypes {{request *.req} {all *.*}} \
             -initialdir $::cfg::_app_req_dir \
             -defaultextension .req]
@@ -1133,7 +1133,7 @@ proc ::cfg::loadRequest {} {
                 }
             }
         } on error {message} {
-            tkwarning "error loading request file $fname:" $message
+            tkwarning "Error loading request file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1142,7 +1142,7 @@ proc ::cfg::loadRequest {} {
 }
 
 proc ::cfg::saveRequest {fname request} {
-    set fname [tk_getSaveFile -title "save request" \
+    set fname [tk_getSaveFile -title "Save Request" \
             -filetypes {{request *.req} {all *.*}} \
             -initialdir $::cfg::_app_req_dir \
             -initialfile $fname \
@@ -1154,7 +1154,7 @@ proc ::cfg::saveRequest {fname request} {
                 puts $f [list $n $v]
             }
         } on error {message} {
-            tkwarning "error saving request file $fname:" $message
+            tkwarning "Error saving request file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1180,8 +1180,8 @@ proc jsonObject {args} {
     return \{[join $result ,]\}
 }
 
-proc tkwarning {args} {tk_messageBox -icon warning -title "warning" -message [join $args \n]}
-proc tkerror {args} {tk_messageBox -icon error -title "error" -message [join $args \n]}
+proc tkwarning {args} {tk_messageBox -icon warning -title "Warning" -message [join $args \n]}
+proc tkerror {args} {tk_messageBox -icon error -title "Error" -message [join $args \n]}
 proc debug {args} {if {$::cfg::_debug} {puts stderr $args}}
 
 proc init {args} {
