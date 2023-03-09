@@ -22,6 +22,8 @@ option add *App*Request*text*Spinbox*relief ridge widgetDefault
 option add *Dialog.msg.wrapLength 5i startupFile
 option add *Dialog.dtl.wrapLength 5i startupFile
 
+bind Listbox <3> {%W selection clear 0 end; %W selection set @%x,%y; %W activate @%x,%y; focus %W}
+
 namespace eval app {
     namespace eval request {
         variable input; array set input {}
@@ -44,6 +46,10 @@ namespace eval app {
             {getChatPinnedMessage chat_id}
             {getChatSponsoredMessages chat_id}
             {getChatMessageCount chat_id}
+        }
+        messages {
+            {getMessage chat_id message_id}
+            {getMessageThread chat_id message_id}
         }
     }
     lappend actions(chats) [list getChatMessageByDate chat_id date [clock seconds]]
@@ -90,10 +96,7 @@ proc ::app::init {} {
             .app.$i.actions add command -label [lindex $action 0] \
                     -command [list ::app::openObjectsAction $i $action]
         }
-        bind .app.$i.f.list <3> \
-                {%W selection clear 0 end; %W selection set @%x,%y; %W activate @%x,%y; focus %W}
-        bind .app.$i.f.list <3> \
-                [list +tk_popup .app.$i.actions %X %Y]
+        bind .app.$i.f.list <3> [list +tk_popup .app.$i.actions %X %Y]
         set ::app::widget($i) .app.$i.f
 
         ::td::setObjectsCallback $i {::app::updateObjects}
@@ -288,12 +291,6 @@ proc ::app::updateObjects {objects name value} {
     }
 }
 
-proc ::app::updateMessages {id name value} {
-    set s [string range "$name: $value" 0 49]
-    set w $::app::widget(messages)$id.f.list
-    $w insert end $s
-}
-
 proc ::app::openObjectsAction {objects action} {
     set w $::app::widget($objects).list
     if {[regexp {^([^:]+):} [$w get active] => id]} {
@@ -301,6 +298,13 @@ proc ::app::openObjectsAction {objects action} {
         request open - "Query [string totitle $objects]: $id" "func" $func /$func/$key $id \
                 {*}[join [lmap {n v} [lrange $action 2 end] {list /$func/$n $v}]]
     }
+}
+
+proc ::app::updateMessages {id name value} {
+    set s [regsub -all {\s+} [regsub {^message} $value ""] " "]
+    set s [string trimright [string range "$name: $s" 0 199]]
+    set w $::app::widget(messages)$id.f.list
+    $w insert end $s
 }
 
 proc ::app::openMessages {} {
@@ -316,6 +320,12 @@ proc ::app::openMessages {} {
             CreateButtons $w.btn close "Close" [list ::app::closeMessages $id]
             pack $w.f -fill both -expand true
             pack $w.btn -fill x
+            menu $w.actions -tearoff 0
+            foreach action $::app::actions(messages) {
+                $w.actions add command -label [lindex $action 0] \
+                        -command [list ::app::openMessagesAction $id $action]
+            }
+            bind $w.f.list <3> [list +tk_popup $w.actions %X %Y]
             ::tk::PlaceWindow [winfo toplevel $w] widget .app
             ::td::setMessagesCallback $id {::app::updateMessages}
         }
@@ -326,6 +336,16 @@ proc ::app::closeMessages {id} {
     set w $::app::widget(messages)$id
     ::td::setMessagesCallback $id {}
     catch {destroy $w}
+}
+
+proc ::app::openMessagesAction {id action} {
+    set w $::app::widget(messages)$id
+    if {[regexp {^([^:]+):} [$w.f.list get active] => messageId]} {
+        lassign $action func key messageKey
+        request open - "Query Messages: $id/$messageId" "func" $func \
+                /$func/$key $id /$func/$messageKey $messageId \
+                {*}[join [lmap {n v} [lrange $action 3 end] {list /$func/$n $v}]]
+    }
 }
 
 proc ::app::CreateToplevel {w class type title delete} {
