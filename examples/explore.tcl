@@ -709,12 +709,7 @@ namespace eval td {
     variable objectsCallback; array set objectsCallback {}
     variable messagesCallback; array set messagesCallback {}
 
-    if {[info commands ::thread::create] ne ""} {
-        variable receiveBgTimeout 1.00
-        variable receiveBgThread ""
-    } else {
-        variable receiveBgTimeout 0.01
-    }
+    variable receiveBgTimeout 0.01
 }
 
 proc ::td::init {} {
@@ -728,6 +723,7 @@ proc ::td::init {} {
                 "https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     }
     if {$::td::apiFile eq ""} {
+        debug "basic descriptors prepared"
         dict set ::td::functions "setTdlibParameters" {
             api_id:int32
             api_hash:string
@@ -751,8 +747,10 @@ proc ::td::init {} {
             emailAddressAuthenticationGoogleId
         }
     }
-    if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread eq ""} {
-        set ::td::receiveBgThread [::thread::create]
+    if {[info commands ::thread::create] ne ""} {
+        debug "threads prepared for receive"
+        variable receiveBgTimeout 1.00
+        variable receiveBgThread [::thread::create]
         ::thread::send $::td::receiveBgThread [list set auto_path $::auto_path]
         ::thread::send $::td::receiveBgThread [list package require tcltdjson]
     }
@@ -795,7 +793,7 @@ proc ::td::send {args} {
 }
 
 proc ::td::receive {timeout} {
-    if {[info exists ::td::receiveBgThread] && $::td::receiveBgThread ne ""} {
+    if {[info exists ::td::receiveBgThread]} {
         ::thread::send -async $::td::receiveBgThread \
                 [list td_receive $timeout] ::td::receiveBgResult
         vwait ::td::receiveBgResult
@@ -1099,19 +1097,20 @@ proc ::cfg::init {args} {
     set rootname [file rootname [info script]]
     set ::cfg::_cfg_cfg_file [load [lindex $args 0] $rootname.cfg]
     if {$::cfg::_debug} {
+        debug "configured using" [file normalize $::cfg::_cfg_cfg_file]
         if {$::tcl_platform(platform) eq "windows"} {
             console show
             update idletasks
             catch {
                 package require dde
                 dde servername ExploreDebug
-                puts stderr "ddeserver started as ExploreTcl"
+                debug "ddeserver started as ExploreTcl"
             }
         }
         catch {
             package require tkconclient
             tkconclient::start 12345
-            puts stderr "tkconclient started at port 12345"
+            debug "tkconclient started at port 12345"
         }
     }
 }
@@ -1202,7 +1201,7 @@ proc jsonObject {args} {
 
 proc tkwarning {args} {tk_messageBox -icon warning -title "Warning" -message [join $args \n]}
 proc tkerror {args} {tk_messageBox -icon error -title "Error" -message [join $args \n]}
-proc debug {args} {if {$::cfg::_debug} {puts stderr $args}}
+proc debug {args} {if {$::cfg::_debug} {puts stderr [join $args]}}
 
 proc init {args} {
     cfg::init {*}$args
