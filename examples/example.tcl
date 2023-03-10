@@ -1,7 +1,8 @@
-lappend auto_path [file join [file dirname [info script]] .. win]
+lappend auto_path [file join [file dirname [info script]] .. win] [file join [file dirname [info script]] ..]
 
 package require tcltdjson
 
+# 1 line JSON parser from https://wiki.tcl-lang.org/page/JSON
 proc json2dict {json} {
     subst -nocommands -novariables [
         string range [
