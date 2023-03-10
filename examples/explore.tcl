@@ -1,7 +1,7 @@
 package require Tk
-package require json
 package require tcltdjson
 catch {package require Thread}
+catch {package require yajltcl}
 
 wm withdraw .
 
@@ -37,14 +37,11 @@ namespace eval app {
         users {
             {getUser user_id}
             {getUserFullInfo user_id}
-            {getUserSupportInfo user_id}
         }
         chats {
             {getChat chat_id}
-            {getMessages chat_id}
             {getChatHistory chat_id}
             {getChatPinnedMessage chat_id}
-            {getChatSponsoredMessages chat_id}
             {getChatMessageCount chat_id}
         }
         messages {
@@ -713,6 +710,16 @@ namespace eval td {
 }
 
 proc ::td::init {} {
+    if {[info commands ::yajl::json2dict] ne ""} {
+        debug "using yajltcl"
+        interp alias {} jsonParse {} ::yajl::json2dict
+    } elseif {![catch {package require json}]} {
+        debug "using tcllib"
+        interp alias {} jsonParse {} ::json::json2dict
+    } else {
+        tkerror "JSON library not found.\nPlease install yayltcl or tcllib"
+        exit
+    }
     if {$::cfg::_td_log_file ne ""} {
         set ::td::logFile [OpenLog $::cfg::_td_log_file]
     }
@@ -723,7 +730,7 @@ proc ::td::init {} {
                 "https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
     }
     if {$::td::apiFile eq ""} {
-        debug "basic descriptors prepared"
+        debug "using basic descriptors"
         dict set ::td::functions "setTdlibParameters" {
             api_id:int32
             api_hash:string
@@ -748,7 +755,7 @@ proc ::td::init {} {
         }
     }
     if {[info commands ::thread::create] ne ""} {
-        debug "threads prepared for receive"
+        debug "using threads"
         variable receiveBgTimeout 1.00
         variable receiveBgThread [::thread::create]
         ::thread::send $::td::receiveBgThread [list set auto_path $::auto_path]
@@ -913,7 +920,7 @@ proc ::td::Parse {info json} {
     if {$json eq ""} return
     WriteLog $info $json
     try {
-        set event [json::json2dict $json]
+        set event [jsonParse $json]
     } on error {message} {
         WriteLog "ERROR" $message
         return ""
@@ -1097,7 +1104,7 @@ proc ::cfg::init {args} {
     set rootname [file rootname [info script]]
     set ::cfg::_cfg_cfg_file [load [lindex $args 0] $rootname.cfg]
     if {$::cfg::_debug} {
-        debug "configured using" [file normalize $::cfg::_cfg_cfg_file]
+        debug "configured from" [file normalize $::cfg::_cfg_cfg_file]
         if {$::tcl_platform(platform) eq "windows"} {
             console show
             update idletasks
@@ -1180,7 +1187,7 @@ proc ::cfg::saveRequest {fname request} {
     }
 }
 
-proc jsonParse {json} {return [json::json2dict $json]}
+proc jsonParse {json} {#::td::init}
 proc jsonArray {args} {return \[[join $args ,]\]}
 proc jsonString {str} {return [join [list \" [string map {\" \\\" \n \\n \r \\r \t \\t \\ \\\\} $str] \"] ""]}
 proc jsonObject {args} {
