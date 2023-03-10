@@ -8,10 +8,10 @@
 #   nmake /f makefile.vc INSTALLDIR=c:\path\to\tcl install
 #
 # Environment variables
-#   TDROOT = "C:\Pd\Lib"               telegram API install
-#   TDSTATIC = 1|0                     link with telegram or use tdjson.dll
-#   SSLLIB = "C:\OpenSSL-Win64\lib\VC" for TDSTATIC = 1
-#   ZLIB = "C:\ZLib"                   for TDSTATIC = 1
+#   TDROOT = "C:\Pd"                   telegram API install path
+#   TDSTATIC = 1|0                     link with telegram static libs or use tdjson.dll
+#   SSLLIB = "C:\OpenSSL-Win64\lib\VC" needed for TDSTATIC = 1
+#   ZLIB = "C:\ZLib"                   needed for TDSTATIC = 1
 #
 # For other build options (debug, static etc.),
 # See TIP 477 (https://core.tcl-lang.org/tips/doc/main/tip/477.md) for
@@ -68,7 +68,9 @@ PRJ_LIBS = $(TDROOT)\lib\tdjson.lib
 # We must define a pkgindex target that will create a pkgIndex.tcl
 # file in the $(OUT_DIR) directory. We can just redirect to the
 # default-pkgindex target for our extension.
-pkgindex: default-pkgindex
+pkgindex:
+	@echo package ifneeded $(PROJECT) $(DOTVERSION) "[list load [file join $$dir $(PRJLIBNAME)] [string totitle $(PROJECT)]]" > $(OUT_DIR)\pkgIndex.tcl
+
 
 $(ROOT)\manifest.uuid:
 	copy $(WIN_DIR)\gitmanifest.in $(ROOT)\manifest.uuid
