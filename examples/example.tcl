@@ -1,5 +1,6 @@
-lappend auto_path [file join [file dirname [info script]] .. win] [file join [file dirname [info script]] ..]
+# tcl version of the python example https://github.com/tdlib/td/blob/master/example/python/tdjson_example.py
 
+lappend auto_path [file join [file dirname [info script]] .. win] [file join [file dirname [info script]] ..]
 package require tcltdjson
 
 # 1 line JSON parser from https://wiki.tcl-lang.org/page/JSON
