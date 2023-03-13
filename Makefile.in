@@ -19,6 +19,14 @@
 
 #TDJSON_NEW_VAR	= @TDJSON_NEW_VAR@
 TDLIB_HOME	= @TDLIB_HOME@
+TDLIB_SHARED	= @TDLIB_SHARED@
+ifneq ($(TDLIB_SHARED),no)
+TDLIB_LIBS	= -ltdjson
+TDLIB_CFLAGS	=
+else
+TDLIB_LIBS	= -ltdjson_static -ltdjson_private -ltdclient -ltdcore -ltdnet -ltdactor -ltddb -ltdsqlite -ltdapi -ltdutils -lstdc++ -lssl -lcrypto
+TDLIB_CFLAGS	= -DTDJSON_STATIC_DEFINE
+endif
 
 #========================================================================
 # Nothing of the variables below this line should need to be changed.
@@ -165,9 +173,9 @@ CONFIG_CLEAN_FILES = Makefile pkgIndex.tcl
 CLEANFILES	= @CLEANFILES@
 
 CPPFLAGS	= @CPPFLAGS@
-LIBS		= @PKG_LIBS@ @LIBS@ -L$(TDLIB_HOME)/lib -ltdjson
+LIBS		= @PKG_LIBS@ @LIBS@ -L$(TDLIB_HOME)/lib $(TDLIB_LIBS)
 AR		= @AR@
-CFLAGS		= @CFLAGS@ -I$(TDLIB_HOME)/include
+CFLAGS		= @CFLAGS@ -I$(TDLIB_HOME)/include $(TDLIB_CFLAGS)
 LDFLAGS		= @LDFLAGS@
 LDFLAGS_DEFAULT			= @LDFLAGS_DEFAULT@
 COMPILE		= $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) \
@@ -482,3 +490,4 @@ uninstall-binaries:
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:
+

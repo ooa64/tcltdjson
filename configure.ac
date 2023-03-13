@@ -187,6 +187,15 @@ AC_ARG_WITH([tdlib],
 TDLIB_HOME="$with_tdlib"
 AC_SUBST([TDLIB_HOME])
 
+AC_ARG_ENABLE([tdshared],
+    [AS_HELP_STRING([--enable-tdshared],
+        [Use shared tdjson library (default: on)])],
+    [enable_tdshared="$enableval"],
+    [enable_tdshared="yes"])
+
+TDLIB_SHARED="$enable_tdshared"
+AC_SUBST([TDLIB_SHARED])
+
 #--------------------------------------------------------------------
 # Specify files to substitute AC variables in. You may alternatively
 # have a special pkgIndex.tcl.in or other files which require
@@ -195,7 +204,7 @@ AC_SUBST([TDLIB_HOME])
 
 AC_CONFIG_FILES([Makefile pkgIndex.tcl])
 #AC_CONFIG_FILES([tcltdjsonConfig.sh])
-OA
+
 #--------------------------------------------------------------------
 # Finally, substitute all of the various values into the files
 # specified with AC_CONFIG_FILES.
