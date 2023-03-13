@@ -215,7 +215,7 @@ proc ::app::request {command w args} {
             CreateToplevel $w Request dialog $title $close
             CreateScrolled $w.txt text text
             CreateButtons $w.btn \
-                select "Select" $select \
+                select "v" $select \
                 send "Send" [list ::app::request "send" $w $title] \
                 load "Load" [list ::app::request::load $w] \
                 save "Save" [list ::app::request::save $w] \
@@ -227,6 +227,9 @@ proc ::app::request {command w args} {
             pack $w.btn -fill x
             bind $w.btn.func <Return> $select
             bind $w.btn.func <FocusIn> {%W selection range 0 end}
+            pack configure $w.btn.select -expand 0
+            $w.btn.select configure -relief flat
+#           $w.btn.select configure -text \u25BC
 
             set bg [$w.txt.text cget -background]
             option add *App*Request*text*Entry*background $bg widgetDefault
