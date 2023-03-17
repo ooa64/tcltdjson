@@ -457,6 +457,9 @@ proc ::app::request::InsertElement {w level align parent name type} {
             $w insert insert [format "%s %-${align}s" $pad "$name:"]
             $w window create insert -window $w.$path
             $w insert insert "\n"
+            if {[string match -nocase "*password*" $name]} {
+                $w.$path configure -show *
+            }
         }
         "array" {
             set script [list ::app::request::UpdateArray $w [expr {$level+1}] $path $info +1lines]
