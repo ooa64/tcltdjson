@@ -53,7 +53,7 @@ namespace eval app {
 }    
 
 proc ::app::init {} {
-    CreateToplevel .app App normal "Explore TDJSON" {::app::quit}
+    CreateToplevel .app App normal "Explore TDJSON" {::quit}
     CreateScrolled .app.log listbox list
     CreateState .app.auth \
             "Client Id:" ::td::clientId \
@@ -118,19 +118,16 @@ proc ::app::createClient {} {
     if {$::td::clientId eq ""} {
         ::td::createClient
         send "Create Client" "@type" [jsonString "getOption"] "name" [jsonString "version"]
-    } elseif {[tk_messageBox -parent .app -type yesno -title "warning" -icon warning \
-            -message "Client already created. Destroy?"] eq "yes"} {
+    } elseif {[tkquestion .app "Client already created. Destroy?"] eq "yes"} {
         send "Destroy Client" "@type" [jsonString "close"]
     }
 }
 
 proc ::app::completeAuth {} {
     if {$::td::authorizationState eq "authorizationStateClosed"} {
-        tk_messageBox -parent .app -icon info -title "info" \
-                -message "Client is closed, create new client"
+        tkwarning .app "Client is closed, create new client"
     } elseif {$::td::authorizationState eq "authorizationStateReady"} {
-        if {[tk_messageBox -parent .app -type yesno -title "warning" -icon warning \
-                -message "Client already authorized, log out?"] eq yes} {
+        if {[tkquestion .app "Client already authorized, log out?"] eq yes} {
             send "Logout Client" "@type" [jsonString "logOut"]
         }
     } else {
@@ -215,7 +212,7 @@ proc ::app::request {command w args} {
             CreateToplevel $w Request dialog $title $close
             CreateScrolled $w.txt text text
             CreateButtons $w.btn \
-                select "Select" $select \
+                select "v" $select \
                 send "Send" [list ::app::request "send" $w $title] \
                 load "Load" [list ::app::request::load $w] \
                 save "Save" [list ::app::request::save $w] \
@@ -227,6 +224,9 @@ proc ::app::request {command w args} {
             pack $w.btn -fill x
             bind $w.btn.func <Return> $select
             bind $w.btn.func <FocusIn> {%W selection range 0 end}
+            pack configure $w.btn.select -expand 0
+            $w.btn.select configure -relief flat
+#           $w.btn.select configure -text \u25BC
 
             set bg [$w.txt.text cget -background]
             option add *App*Request*text*Entry*background $bg widgetDefault
@@ -454,6 +454,9 @@ proc ::app::request::InsertElement {w level align parent name type} {
             $w insert insert [format "%s %-${align}s" $pad "$name:"]
             $w window create insert -window $w.$path
             $w insert insert "\n"
+            if {[string match -nocase "*password*" $name]} {
+                $w.$path configure -show *
+            }
         }
         "array" {
             set script [list ::app::request::UpdateArray $w [expr {$level+1}] $path $info +1lines]
@@ -691,6 +694,7 @@ namespace eval td {
     variable descriptions [dict create]
     variable logFile ""
     variable apiFile ""
+    variable apiFileLocation "https://raw.githubusercontent.com/tdlib/td/master/td/generate/scheme/td_api.tl"
     variable apiBasic; array set apiBasic {
         "double" "double"
         "string" "print"
@@ -717,7 +721,7 @@ proc ::td::init {} {
         debug "using tcllib"
         interp alias {} jsonParse {} ::json::json2dict
     } else {
-        tkerror "JSON library not found.\nPlease install yayltcl or tcllib"
+        tkerror . "JSON library not found.\nPlease install yayltcl or tcllib"
         exit
     }
     if {$::cfg::_td_log_file ne ""} {
@@ -725,9 +729,11 @@ proc ::td::init {} {
     }
     if {$::cfg::_td_api_file ne "" && [file exists $::cfg::_td_api_file]} {
         set ::td::apiFile [OpenApi $::cfg::_td_api_file]
-    } else {
-        tkwarning "The API file '$::cfg::_td_api_file' is missing.\nThe latest API file is available at" \
-                "https://github.com/tdlib/td/blob/master/td/generate/scheme/td_api.tl"
+    } elseif {[tkquestion . "The API file '$::cfg::_td_api_file' is missing.\n" \
+            "Download from $td::apiFileLocation ?"] == "yes"} {
+        if {[td::DownloadApi $td::apiFileLocation $::cfg::_td_api_file]} {
+            set ::td::apiFile [OpenApi $::cfg::_td_api_file]
+        }
     }
     if {$::td::apiFile eq ""} {
         debug "using basic descriptors"
@@ -879,7 +885,7 @@ proc ::td::getDescription {apiname} {
             }
             set result [split [string map {" @" "\n@"} $result] "\n"]
         } on error {message} {
-            tkwarning "Error reading api file:" $message
+            tkwarning . "Error reading api file:" $message
             catch {close $::td::apiFile}
             set ::td::apiFile ""
         }
@@ -1045,17 +1051,41 @@ proc ::td::OpenApi {fname} {
         }
         return $f
     } on error {message} {
-        tkwarning "Error loading API file $fname:" $message
+        tkwarning . "Error loading API file $fname:" $message
         catch {close $f}
         return ""
     }
+}
+
+proc ::td::DownloadApi {source destination} {
+    if {![catch {package require http} message] && ![catch {package require tls} message]} {
+        ::http::register https 443 ::tls::socket
+        set tok [::http::geturl $source]
+        if {[::http::status $tok] eq "ok" && [::http::ncode $tok] == 200} {
+            try {
+                set f [open $destination "w"]
+                puts -nonewline $f [::http::data $tok]
+                close $f
+                ::http::cleanup $tok
+                return true
+            } on error message {
+                catch {close $f}
+                catch {file delete $destination}
+                ::http::cleanup $tok
+            }
+        } else {
+            set message "[::http::status $tok] [::http::code $tok]\n[::http::error $tok]"
+        }
+    }
+    tkerror . "Error downloading API file:" $message
+    return false
 }
 
 proc ::td::OpenLog {fname} {
     try {
         set ::td::logFile [open $fname a]
     } on error {message} {
-        tkwarning "Error opening log file $fname:" $message
+        tkwarning . "Error opening log file $fname:" $message
     }
 }
 
@@ -1071,7 +1101,7 @@ proc ::td::WriteLog {info text} {
             puts $::td::logFile [format "%s %s %s" $stamp $info $text]
         } on error {message} {
             ::td::CloseLog
-            tkwarning "Error writing log file:" $message
+            tkwarning . "Error writing log file:" $message
         }
     }
     if {$::td::logCallback ne ""} {
@@ -1083,7 +1113,7 @@ proc ::td::Fatal {level message} {
     puts stderr "tdlib message: $level $message"
     if {$level == 0} {
         ::td::quit
-        tk_messageBox -title "TDLIB fatal error" -icon error -message $message
+        tkerror . "TDLIB fatal error:" $message
         exit 1
     }
 }
@@ -1135,7 +1165,7 @@ proc ::cfg::load {fname1 fname2} {
                 }
             }
         } on error {message} {
-            tkwarning "Error loading config file $fname:" $message
+            tkwarning . "Error loading config file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1159,7 +1189,7 @@ proc ::cfg::loadRequest {} {
                 }
             }
         } on error {message} {
-            tkwarning "Error loading request file $fname:" $message
+            tkwarning . "Error loading request file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1180,7 +1210,7 @@ proc ::cfg::saveRequest {fname request} {
                 puts $f [list $n $v]
             }
         } on error {message} {
-            tkwarning "Error saving request file $fname:" $message
+            tkwarning . "Error saving request file $fname:" $message
         } finally {
             catch {close $f}
         }
@@ -1206,8 +1236,9 @@ proc jsonObject {args} {
     return \{[join $result ,]\}
 }
 
-proc tkwarning {args} {tk_messageBox -icon warning -title "Warning" -message [join $args \n]}
-proc tkerror {args} {tk_messageBox -icon error -title "Error" -message [join $args \n]}
+proc tkquestion {w args} {tk_messageBox -parent $w -icon question -title "Question" -type yesno -message [join $args \n]}
+proc tkwarning {w args} {tk_messageBox -parent $w -icon warning -title "Warning" -message [join $args \n]}
+proc tkerror {w args} {tk_messageBox -parent $w -icon error -title "Error" -message [join $args \n]}
 proc debug {args} {if {$::cfg::_debug} {puts stderr [join $args]}}
 
 proc init {args} {
