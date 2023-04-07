@@ -195,7 +195,6 @@ AC_SUBST([TDLIB_HOME])
 
 AC_CONFIG_FILES([Makefile pkgIndex.tcl])
 #AC_CONFIG_FILES([tcltdjsonConfig.sh])
-OA
 #--------------------------------------------------------------------
 # Finally, substitute all of the various values into the files
 # specified with AC_CONFIG_FILES.
