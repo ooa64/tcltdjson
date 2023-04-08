@@ -178,7 +178,7 @@ TEA_PROG_TCLSH
 
 AC_ARG_WITH([tdlib],
     [AS_HELP_STRING([--with-tdlib=<path>],
-        [The top-level directory to the tdlib installation.])],
+        [directory with tdlib installation.])],
     [AS_IF([test -d "$with_tdlib"],
         [AC_MSG_NOTICE([Using tdlib from "$with_tdlib"])],
         [AC_MSG_ERROR([Specify an existing directory for tdlib, not "$with_tdlib"])])],
@@ -186,6 +186,17 @@ AC_ARG_WITH([tdlib],
 
 TDLIB_HOME="$with_tdlib"
 AC_SUBST([TDLIB_HOME])
+
+AC_ARG_ENABLE(tdshared,
+  [AS_HELP_STRING([--enable-tdshared],
+        [enable linking with shared tdlib (default: on)])],
+  [case "${enableval}" in
+     yes | no ) TDLIB_SHARED="${enableval}" ;;
+     *) AC_MSG_ERROR(bad value ${enableval} for --enable-tdshared) ;;
+   esac],
+  [TDLIB_SHARED="no"]
+)
+AC_SUBST([TDLIB_SHARED])
 
 #--------------------------------------------------------------------
 # Specify files to substitute AC variables in. You may alternatively
