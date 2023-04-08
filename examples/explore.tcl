@@ -1147,8 +1147,10 @@ proc ::cfg::init {args} {
     if {$::cfg::_debug} {
         debug "configured from" [file normalize $::cfg::_cfg_cfg_file]
         if {$::tcl_platform(platform) eq "windows"} {
-            console show
-            update idletasks
+            catch {
+                console show
+                update idletasks
+            }
             catch {
                 package require dde
                 dde servername ExploreDebug
