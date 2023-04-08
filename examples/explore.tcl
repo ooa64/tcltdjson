@@ -53,6 +53,7 @@ namespace eval app {
 }    
 
 proc ::app::init {} {
+    ScaleFonts $::cfg::_app_font_scale
     CreateToplevel .app App normal "Explore TDJSON" {::quit}
     CreateScrolled .app.log listbox list
     CreateState .app.auth \
@@ -391,6 +392,15 @@ proc ::app::FormatEventJson {json} {
         return $result\n$json
     } else {
         return [td::formatEvent $result]
+    }
+}
+
+proc ::app::ScaleFonts {scale} {
+    foreach f {Default Text Fixed Caption Menu} {
+        set size [font configure Tk${f}Font -size]
+        set scaled [expr {int($scale/100.0*$size)}]
+        font configure Tk${f}Font -size $scaled
+        # debug "scale Tk${f}Font $size -> $scaled"
     }
 }
 
@@ -1126,6 +1136,7 @@ namespace eval cfg {
     variable _app_req_dir ""
     variable _app_log_max_lines 1000
     variable _app_log_enabled 1
+    variable _app_font_scale 100
     variable request; array set request {}
     coroutine nextId apply {{} {yield; while true {yield [incr i]}}}
 }
