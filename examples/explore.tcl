@@ -53,7 +53,6 @@ namespace eval app {
 }    
 
 proc ::app::init {} {
-    ScaleFonts $::cfg::_app_font_scale
     CreateToplevel .app App normal "Explore TDJSON" {::quit}
     CreateScrolled .app.log listbox list
     CreateState .app.auth \
@@ -392,15 +391,6 @@ proc ::app::FormatEventJson {json} {
         return $result\n$json
     } else {
         return [td::formatEvent $result]
-    }
-}
-
-proc ::app::ScaleFonts {scale} {
-    foreach f {Default Text Fixed Caption Menu} {
-        set size [font configure Tk${f}Font -size]
-        set scaled [expr {int($scale/100.0*$size)}]
-        font configure Tk${f}Font -size $scaled
-        # debug "scale Tk${f}Font $size -> $scaled"
     }
 }
 
@@ -1143,7 +1133,8 @@ namespace eval cfg {
 
 proc ::cfg::init {args} {
     set rootname [file rootname [info script]]
-    set ::cfg::_cfg_cfg_file [load [lindex $args 0] $rootname.cfg]
+    set ::cfg::_cfg_cfg_file [Load [lindex $args 0] $rootname.cfg]
+    Scale $::cfg::_app_font_scale
     if {$::cfg::_debug} {
         debug "configured from" [file normalize $::cfg::_cfg_cfg_file]
         if {$::tcl_platform(platform) eq "windows"} {
@@ -1163,27 +1154,6 @@ proc ::cfg::init {args} {
             debug "tkconclient started at port 12345"
         }
     }
-}
-
-proc ::cfg::load {fname1 fname2} {
-    set fname [expr {$fname1 ne "" ? $fname1 : $fname2}]
-    if {$fname1 ne "" || [file exists $fname]} {
-        try {
-            set f [open $fname "r"]
-            foreach l [split [read $f] \n] {
-                set l [string trim $l]
-                switch -- [string range $l 0 0] {
-                    "_" {set ::cfg::[lindex $l 0] [lindex $l 1]}
-                    "/" {set ::cfg::request([lindex $l 0]) [lindex $l 1]}
-                }
-            }
-        } on error {message} {
-            tkwarning . "Error loading config file $fname:" $message
-        } finally {
-            catch {close $f}
-        }
-    }
-    return $fname
 }
 
 proc ::cfg::loadRequest {} {
@@ -1227,6 +1197,36 @@ proc ::cfg::saveRequest {fname request} {
         } finally {
             catch {close $f}
         }
+    }
+}
+
+proc ::cfg::Load {fname1 fname2} {
+    set fname [expr {$fname1 ne "" ? $fname1 : $fname2}]
+    if {$fname1 ne "" || [file exists $fname]} {
+        try {
+            set f [open $fname "r"]
+            foreach l [split [read $f] \n] {
+                set l [string trim $l]
+                switch -- [string range $l 0 0] {
+                    "_" {set ::cfg::[lindex $l 0] [lindex $l 1]}
+                    "/" {set ::cfg::request([lindex $l 0]) [lindex $l 1]}
+                }
+            }
+        } on error {message} {
+            tkwarning . "Error loading config file $fname:" $message
+        } finally {
+            catch {close $f}
+        }
+    }
+    return $fname
+}
+
+proc ::cfg::Scale {scale} {
+    foreach f {Default Text Fixed Caption Menu} {
+        set size [font configure Tk${f}Font -size]
+        set scaled [expr {int(min(max($scale,-1000),1000)/100.0*$size)}]
+        font configure Tk${f}Font -size $scaled
+        debug "scale Tk${f}Font $size -> $scaled"
     }
 }
 
