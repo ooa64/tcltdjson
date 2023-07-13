@@ -1120,8 +1120,8 @@ proc ::td::Fatal {level message} {
 
 namespace eval cfg {
     variable _debug 0
-    variable _td_api_file ""
-    variable _td_log_file ""
+    variable _td_api_file "td_api.tl"
+    variable _td_log_file "td_api.log"
     variable _cfg_cfg_file ""
     variable _app_req_dir ""
     variable _app_log_max_lines 1000
